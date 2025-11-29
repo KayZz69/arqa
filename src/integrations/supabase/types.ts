@@ -14,16 +14,185 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      daily_reports: {
+        Row: {
+          barista_id: string
+          created_at: string
+          id: string
+          is_locked: boolean
+          report_date: string
+          submitted_at: string
+        }
+        Insert: {
+          barista_id: string
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          report_date: string
+          submitted_at?: string
+        }
+        Update: {
+          barista_id?: string
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          report_date?: string
+          submitted_at?: string
+        }
+        Relationships: []
+      }
+      inventory_batches: {
+        Row: {
+          arrival_date: string
+          created_at: string
+          created_by: string
+          expiry_date: string
+          id: string
+          position_id: string
+          quantity: number
+        }
+        Insert: {
+          arrival_date: string
+          created_at?: string
+          created_by: string
+          expiry_date: string
+          id?: string
+          position_id: string
+          quantity: number
+        }
+        Update: {
+          arrival_date?: string
+          created_at?: string
+          created_by?: string
+          expiry_date?: string
+          id?: string
+          position_id?: string
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_batches_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      positions: {
+        Row: {
+          active: boolean
+          category: string
+          created_at: string
+          id: string
+          name: string
+          shelf_life_days: number | null
+          sort_order: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          category: string
+          created_at?: string
+          id?: string
+          name: string
+          shelf_life_days?: number | null
+          sort_order?: number
+          unit: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          shelf_life_days?: number | null
+          sort_order?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      report_items: {
+        Row: {
+          created_at: string
+          ending_stock: number
+          id: string
+          position_id: string
+          report_id: string
+          write_off: number
+        }
+        Insert: {
+          created_at?: string
+          ending_stock?: number
+          id?: string
+          position_id: string
+          report_id: string
+          write_off?: number
+        }
+        Update: {
+          created_at?: string
+          ending_stock?: number
+          id?: string
+          position_id?: string
+          report_id?: string
+          write_off?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_items_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
+            referencedRelation: "positions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_items_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "daily_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "barista" | "manager"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +319,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["barista", "manager"],
+    },
   },
 } as const
