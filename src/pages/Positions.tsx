@@ -9,16 +9,19 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Pencil, ArrowLeft } from "lucide-react";
 import { z } from "zod";
 
+const CATEGORIES = ["Выпечка", "Кухня", "Ингредиент", "Расходник"] as const;
+const UNITS = ["кг", "л", "шт", "г", "мл", "уп"] as const;
+
 const positionSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
-  category: z.string().trim().min(1, "Category is required").max(50),
-  unit: z.string().trim().min(1, "Unit is required").max(20),
+  category: z.enum(CATEGORIES, { required_error: "Category is required" }),
+  unit: z.enum(UNITS, { required_error: "Unit is required" }),
   shelf_life_days: z.number().int().min(0).nullable(),
-  sort_order: z.number().int().min(0),
   active: z.boolean(),
 });
 
@@ -29,7 +32,6 @@ type Position = {
   unit: string;
   shelf_life_days: number | null;
   active: boolean;
-  sort_order: number;
   created_at: string;
   updated_at: string;
 };
@@ -48,7 +50,6 @@ const Positions = () => {
     category: "",
     unit: "",
     shelf_life_days: null,
-    sort_order: 0,
     active: true,
   });
 
@@ -69,7 +70,7 @@ const Positions = () => {
         .from("positions")
         .select("*")
         .order("category")
-        .order("sort_order");
+        .order("name");
 
       if (error) throw error;
       setPositions(data || []);
@@ -89,7 +90,6 @@ const Positions = () => {
         category: position.category,
         unit: position.unit,
         shelf_life_days: position.shelf_life_days,
-        sort_order: position.sort_order,
         active: position.active,
       });
     } else {
@@ -99,7 +99,6 @@ const Positions = () => {
         category: "",
         unit: "",
         shelf_life_days: null,
-        sort_order: Math.max(...positions.map(p => p.sort_order), 0) + 1,
         active: true,
       });
     }
@@ -114,7 +113,6 @@ const Positions = () => {
       category: "",
       unit: "",
       shelf_life_days: null,
-      sort_order: 0,
       active: true,
     });
   };
@@ -133,7 +131,6 @@ const Positions = () => {
             category: validatedData.category,
             unit: validatedData.unit,
             shelf_life_days: validatedData.shelf_life_days,
-            sort_order: validatedData.sort_order,
             active: validatedData.active,
           })
           .eq("id", editingPosition.id);
@@ -148,7 +145,6 @@ const Positions = () => {
             category: validatedData.category,
             unit: validatedData.unit,
             shelf_life_days: validatedData.shelf_life_days,
-            sort_order: validatedData.sort_order,
             active: validatedData.active,
           }]);
 
@@ -225,23 +221,39 @@ const Positions = () => {
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="category">Category</Label>
-                    <Input
-                      id="category"
+                    <Select
                       value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      placeholder="e.g., Dairy"
-                      required
-                    />
+                      onValueChange={(value) => setFormData({ ...formData, category: value })}
+                    >
+                      <SelectTrigger id="category">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        {CATEGORIES.map((cat) => (
+                          <SelectItem key={cat} value={cat}>
+                            {cat}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="unit">Unit</Label>
-                    <Input
-                      id="unit"
+                    <Select
                       value={formData.unit}
-                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                      placeholder="e.g., liters, kg, pieces"
-                      required
-                    />
+                      onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                    >
+                      <SelectTrigger id="unit">
+                        <SelectValue placeholder="Select unit" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background z-50">
+                        {UNITS.map((unit) => (
+                          <SelectItem key={unit} value={unit}>
+                            {unit}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="shelf_life_days">Shelf Life (days)</Label>
@@ -255,20 +267,6 @@ const Positions = () => {
                         shelf_life_days: e.target.value ? parseInt(e.target.value) : null 
                       })}
                       placeholder="Optional"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="sort_order">Sort Order</Label>
-                    <Input
-                      id="sort_order"
-                      type="number"
-                      min="0"
-                      value={formData.sort_order}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        sort_order: parseInt(e.target.value) || 0 
-                      })}
-                      required
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -306,7 +304,6 @@ const Positions = () => {
                     <TableHead>Name</TableHead>
                     <TableHead>Unit</TableHead>
                     <TableHead>Shelf Life</TableHead>
-                    <TableHead>Sort Order</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -319,7 +316,6 @@ const Positions = () => {
                       <TableCell>
                         {position.shelf_life_days ? `${position.shelf_life_days} days` : "N/A"}
                       </TableCell>
-                      <TableCell>{position.sort_order}</TableCell>
                       <TableCell>
                         <span className={position.active ? "text-green-600" : "text-muted-foreground"}>
                           {position.active ? "Active" : "Inactive"}
