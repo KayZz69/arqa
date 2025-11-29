@@ -202,9 +202,13 @@ export default function DailyReport() {
   const handleInputChange = (positionId: string, field: "ending_stock" | "write_off", value: string) => {
     const numValue = parseFloat(value) || 0;
     
+    console.log('handleInputChange:', { positionId, field, value, numValue });
+    
     setReportItems(prev => {
       const current = prev[positionId] || { position_id: positionId, ending_stock: 0, write_off: 0 };
       const updated = { ...current, [field]: numValue };
+      
+      console.log('Updated reportItems:', { positionId, updated, allItems: { ...prev, [positionId]: updated } });
       
       // For managers editing locked reports, save immediately
       if (reportId && isLocked && role === "manager") {
@@ -618,21 +622,30 @@ export default function DailyReport() {
 
       {/* Desktop Submit Button for Baristas */}
       {role === "barista" && !isLocked && (
-        <div className="hidden md:flex mt-6 gap-2 justify-end">
-          <Button 
-            variant="destructive"
-            onClick={handleDeleteReport}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Очистить черновик
-          </Button>
-          <Button 
-            onClick={handleSubmitReport}
-            disabled={submitting || filledPositions === 0}
-          >
-            <Send className="h-4 w-4 mr-2" />
-            {submitting ? "Отправка..." : "Отправить отчёт"}
-          </Button>
+        <div className="hidden md:block mt-6">
+          {filledPositions === 0 && (
+            <p className="text-sm text-muted-foreground text-right mb-2">
+              Заполните хотя бы одну позицию, чтобы отправить отчёт
+            </p>
+          )}
+          <div className="flex gap-2 justify-end">
+            <Button 
+              variant="destructive"
+              onClick={handleDeleteReport}
+              disabled={Object.keys(reportItems).length === 0}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Очистить черновик
+            </Button>
+            <Button 
+              onClick={handleSubmitReport}
+              disabled={submitting || filledPositions === 0}
+              size="lg"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {submitting ? "Отправка..." : "Отправить отчёт"}
+            </Button>
+          </div>
         </div>
       )}
 
