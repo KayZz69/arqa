@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
@@ -36,10 +36,14 @@ type ReportItem = {
 
 export default function DailyReport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { role, loading: roleLoading } = useUserRole();
   const { toast } = useToast();
 
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const dateParam = searchParams.get("date");
+    return dateParam ? new Date(dateParam) : new Date();
+  });
   const [reportId, setReportId] = useState<string | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [reportItems, setReportItems] = useState<Record<string, ReportItem>>({});
