@@ -30,22 +30,39 @@ const Login = () => {
     if (selectedRole) {
       const fetchUsers = async () => {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select(`
-            user_id,
-            display_name,
-            username,
-            user_roles!inner(role)
-          `)
-          .eq('user_roles.role', selectedRole);
+        
+        // 1. Get user_ids with the selected role
+        const { data: roleData, error: roleError } = await supabase
+          .from('user_roles')
+          .select('user_id')
+          .eq('role', selectedRole);
 
-        if (error) {
-          console.error("Error fetching users:", error);
+        if (roleError) {
+          console.error("Error fetching roles:", roleError);
           toast.error("Ошибка загрузки пользователей");
-        } else {
-          setUsers(data || []);
+          setLoading(false);
+          return;
         }
+
+        if (roleData && roleData.length > 0) {
+          const userIds = roleData.map(r => r.user_id);
+          
+          // 2. Get profiles for these users
+          const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('user_id, display_name, username')
+            .in('user_id', userIds);
+
+          if (profileError) {
+            console.error("Error fetching profiles:", profileError);
+            toast.error("Ошибка загрузки пользователей");
+          } else {
+            setUsers(profiles || []);
+          }
+        } else {
+          setUsers([]);
+        }
+        
         setLoading(false);
       };
       fetchUsers();
