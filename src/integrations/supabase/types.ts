@@ -46,7 +46,7 @@ export type Database = {
           arrival_date: string
           created_at: string
           created_by: string
-          expiry_date: string
+          expiry_date: string | null
           id: string
           position_id: string
           quantity: number
@@ -55,7 +55,7 @@ export type Database = {
           arrival_date: string
           created_at?: string
           created_by: string
-          expiry_date: string
+          expiry_date?: string | null
           id?: string
           position_id: string
           quantity: number
@@ -64,7 +64,7 @@ export type Database = {
           arrival_date?: string
           created_at?: string
           created_by?: string
-          expiry_date?: string
+          expiry_date?: string | null
           id?: string
           position_id?: string
           quantity?: number

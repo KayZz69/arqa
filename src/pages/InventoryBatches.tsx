@@ -28,14 +28,15 @@ import {
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { ArrowLeft, Plus, Trash2, X } from "lucide-react";
+import { format, addDays } from "date-fns";
 
 interface Position {
   id: string;
   name: string;
   category: string;
   unit: string;
+  shelf_life_days: number | null;
 }
 
 interface InventoryBatch {
@@ -43,9 +44,14 @@ interface InventoryBatch {
   position_id: string;
   quantity: number;
   arrival_date: string;
-  expiry_date: string;
+  expiry_date: string | null;
   created_at: string;
   positions: Position;
+}
+
+interface BatchItem {
+  positionId: string;
+  quantity: string;
 }
 
 export default function InventoryBatches() {
@@ -56,13 +62,13 @@ export default function InventoryBatches() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form state
-  const [selectedPositionId, setSelectedPositionId] = useState<string>("");
-  const [quantity, setQuantity] = useState<string>("");
+  // Form state - multiple items per batch
   const [arrivalDate, setArrivalDate] = useState<string>(
     format(new Date(), "yyyy-MM-dd")
   );
-  const [expiryDate, setExpiryDate] = useState<string>("");
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([
+    { positionId: "", quantity: "" },
+  ]);
 
   useEffect(() => {
     if (!roleLoading && role !== "manager") {
@@ -96,7 +102,8 @@ export default function InventoryBatches() {
             id,
             name,
             category,
-            unit
+            unit,
+            shelf_life_days
           )
         `
         )
@@ -116,12 +123,55 @@ export default function InventoryBatches() {
     }
   };
 
+  const addBatchItem = () => {
+    setBatchItems([...batchItems, { positionId: "", quantity: "" }]);
+  };
+
+  const removeBatchItem = (index: number) => {
+    if (batchItems.length === 1) return;
+    setBatchItems(batchItems.filter((_, i) => i !== index));
+  };
+
+  const updateBatchItem = (
+    index: number,
+    field: keyof BatchItem,
+    value: string
+  ) => {
+    const updated = [...batchItems];
+    updated[index][field] = value;
+    setBatchItems(updated);
+  };
+
+  const calculateExpiryDate = (
+    arrivalDate: string,
+    shelfLifeDays: number | null
+  ): string | null => {
+    if (!shelfLifeDays) return null;
+    const arrival = new Date(arrivalDate);
+    const expiry = addDays(arrival, shelfLifeDays);
+    return format(expiry, "yyyy-MM-dd");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPositionId || !quantity || !arrivalDate || !expiryDate) {
+
+    // Validate
+    const validItems = batchItems.filter(
+      (item) => item.positionId && item.quantity
+    );
+    if (validItems.length === 0) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all fields",
+        description: "Please add at least one position with quantity",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!arrivalDate) {
+      toast({
+        title: "Validation Error",
+        description: "Please select an arrival date",
         variant: "destructive",
       });
       return;
@@ -134,26 +184,37 @@ export default function InventoryBatches() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase.from("inventory_batches").insert({
-        position_id: selectedPositionId,
-        quantity: parseFloat(quantity),
-        arrival_date: arrivalDate,
-        expiry_date: expiryDate,
-        created_by: user.id,
+      // Prepare batch records with calculated expiry dates
+      const batchRecords = validItems.map((item) => {
+        const position = positions.find((p) => p.id === item.positionId);
+        const expiryDate = calculateExpiryDate(
+          arrivalDate,
+          position?.shelf_life_days || null
+        );
+
+        return {
+          position_id: item.positionId,
+          quantity: parseFloat(item.quantity),
+          arrival_date: arrivalDate,
+          expiry_date: expiryDate,
+          created_by: user.id,
+        };
       });
+
+      const { error } = await supabase
+        .from("inventory_batches")
+        .insert(batchRecords);
 
       if (error) throw error;
 
       toast({
         title: "Success",
-        description: "Batch added successfully",
+        description: `Added ${validItems.length} batch item${validItems.length > 1 ? "s" : ""} successfully`,
       });
 
       // Reset form
-      setSelectedPositionId("");
-      setQuantity("");
       setArrivalDate(format(new Date(), "yyyy-MM-dd"));
-      setExpiryDate("");
+      setBatchItems([{ positionId: "", quantity: "" }]);
 
       // Refresh data
       fetchData();
@@ -196,6 +257,20 @@ export default function InventoryBatches() {
     }
   };
 
+  const getExpiryDisplay = (batch: InventoryBatch): string => {
+    if (batch.expiry_date) {
+      return format(new Date(batch.expiry_date), "dd.MM.yyyy");
+    }
+    if (batch.positions.shelf_life_days) {
+      const calculated = calculateExpiryDate(
+        batch.arrival_date,
+        batch.positions.shelf_life_days
+      );
+      return calculated ? format(new Date(calculated), "dd.MM.yyyy") : "—";
+    }
+    return "—";
+  };
+
   if (roleLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -212,11 +287,7 @@ export default function InventoryBatches() {
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => navigate("/")}
-          >
+          <Button variant="outline" size="icon" onClick={() => navigate("/")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -224,7 +295,7 @@ export default function InventoryBatches() {
               Inventory Batch Management
             </h1>
             <p className="text-muted-foreground">
-              Add and manage inventory batches
+              Add multiple positions per batch with automatic expiry calculation
             </p>
           </div>
         </div>
@@ -238,43 +309,11 @@ export default function InventoryBatches() {
                 Add New Batch
               </CardTitle>
               <CardDescription>
-                Enter batch details to add to inventory
+                Add multiple items to one batch delivery
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="position">Position</Label>
-                  <Select
-                    value={selectedPositionId}
-                    onValueChange={setSelectedPositionId}
-                  >
-                    <SelectTrigger id="position">
-                      <SelectValue placeholder="Select position" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {positions.map((position) => (
-                        <SelectItem key={position.id} value={position.id}>
-                          {position.category} - {position.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    placeholder="Enter quantity"
-                  />
-                </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="arrival">Arrival Date</Label>
                   <Input
@@ -283,16 +322,81 @@ export default function InventoryBatches() {
                     value={arrivalDate}
                     onChange={(e) => setArrivalDate(e.target.value)}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Expiry dates calculated automatically
+                  </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="expiry">Expiry Date</Label>
-                  <Input
-                    id="expiry"
-                    type="date"
-                    value={expiryDate}
-                    onChange={(e) => setExpiryDate(e.target.value)}
-                  />
+                <div className="space-y-3">
+                  <Label>Positions & Quantities</Label>
+                  {batchItems.map((item, index) => (
+                    <div key={index} className="space-y-2 p-3 border rounded-md">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">
+                          Item {index + 1}
+                        </span>
+                        {batchItems.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeBatchItem(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      <Select
+                        value={item.positionId}
+                        onValueChange={(value) =>
+                          updateBatchItem(index, "positionId", value)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select position" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {positions.map((position) => (
+                            <SelectItem key={position.id} value={position.id}>
+                              {position.category} - {position.name}
+                              {position.shelf_life_days && (
+                                <span className="text-xs text-muted-foreground ml-1">
+                                  ({position.shelf_life_days}д)
+                                </span>
+                              )}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          updateBatchItem(index, "quantity", e.target.value)
+                        }
+                        placeholder="Quantity"
+                      />
+                      {item.positionId && (
+                        <p className="text-xs text-muted-foreground">
+                          Unit:{" "}
+                          {positions.find((p) => p.id === item.positionId)
+                            ?.unit || ""}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addBatchItem}
+                    className="w-full"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Another Item
+                  </Button>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={submitting}>
@@ -346,9 +450,7 @@ export default function InventoryBatches() {
                           <TableCell>
                             {format(new Date(batch.arrival_date), "dd.MM.yyyy")}
                           </TableCell>
-                          <TableCell>
-                            {format(new Date(batch.expiry_date), "dd.MM.yyyy")}
-                          </TableCell>
+                          <TableCell>{getExpiryDisplay(batch)}</TableCell>
                           <TableCell className="text-right">
                             <Button
                               variant="ghost"
