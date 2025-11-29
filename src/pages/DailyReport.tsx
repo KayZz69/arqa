@@ -301,8 +301,9 @@ export default function DailyReport() {
   };
 
   const handleDeleteReport = async () => {
-    // Managers can only delete unlocked reports, baristas can only delete their own unlocked reports
-    if (!reportId || (isLocked && role !== "manager")) return;
+    // Managers can delete any report, baristas can only delete their own unlocked reports
+    if (!reportId) return;
+    if (role !== "manager" && isLocked) return;
     
     if (!confirm("Вы уверены, что хотите удалить этот отчёт? Это удалит все элементы в отчёте.")) {
       return;
@@ -418,22 +419,22 @@ export default function DailyReport() {
               )}
             </Button>
           )}
-          {reportId && !isLocked && role === "barista" && (
-            <>
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={handleSubmitReport}
-                disabled={submitting}
-              >
-                <Send className="h-4 w-4 mr-2" />
-                {submitting ? "Отправка..." : "Отправить отчёт"}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Удалить отчёт
-              </Button>
-            </>
+          {reportId && role === "barista" && !isLocked && (
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={handleSubmitReport}
+              disabled={submitting}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {submitting ? "Отправка..." : "Отправить отчёт"}
+            </Button>
+          )}
+          {reportId && ((role === "barista" && !isLocked) || role === "manager") && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Удалить отчёт
+            </Button>
           )}
         </div>
       </div>
