@@ -29,7 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
-import { ArrowLeft, Download, FileText, Lock, Unlock } from "lucide-react";
+import { ArrowLeft, Download, FileText, Lock, Unlock, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface DailyReport {
@@ -147,6 +147,39 @@ export default function ManagerReports() {
       toast({
         title: "Ошибка",
         description: "Не удалось обновить отчёт",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditReport = (reportId: string, reportDate: string) => {
+    navigate(`/daily-report?date=${reportDate}`);
+  };
+
+  const handleDeleteReport = async (reportId: string) => {
+    if (!confirm("Вы уверены, что хотите удалить этот отчёт? Это удалит все элементы в отчёте.")) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("daily_reports")
+        .delete()
+        .eq("id", reportId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Успешно",
+        description: "Отчёт успешно удалён",
+      });
+
+      fetchData();
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось удалить отчёт",
         variant: "destructive",
       });
     }
@@ -346,17 +379,37 @@ export default function ManagerReports() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleLock(report.id, report.is_locked)}
-                          >
-                            {report.is_locked ? (
-                              <Unlock className="h-4 w-4" />
-                            ) : (
-                              <Lock className="h-4 w-4" />
-                            )}
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditReport(report.id, report.report_date)}
+                              title="Редактировать отчёт"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleToggleLock(report.id, report.is_locked)}
+                              title={report.is_locked ? "Разблокировать" : "Заблокировать"}
+                            >
+                              {report.is_locked ? (
+                                <Unlock className="h-4 w-4" />
+                              ) : (
+                                <Lock className="h-4 w-4" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteReport(report.id)}
+                              className="text-destructive hover:text-destructive"
+                              title="Удалить отчёт"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
