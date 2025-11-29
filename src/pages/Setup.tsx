@@ -14,9 +14,9 @@ const Setup = () => {
     setLoading(true);
 
     const accounts = [
-      { username: "1", password: "1", role: "barista" as const },
-      { username: "2", password: "2", role: "barista" as const },
-      { username: "69", password: "69", role: "manager" as const },
+      { username: "1", password: "111111", role: "barista" as const },
+      { username: "2", password: "222222", role: "barista" as const },
+      { username: "69", password: "696969", role: "manager" as const },
     ];
 
     let successCount = 0;
@@ -90,9 +90,9 @@ const Setup = () => {
           <div className="space-y-2 text-sm">
             <p className="font-semibold">This will create:</p>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              <li>Barista 1 (Username: 1, Password: 1)</li>
-              <li>Barista 2 (Username: 2, Password: 2)</li>
-              <li>Manager (Username: 69, Password: 69)</li>
+              <li>Barista 1 (Username: 1, Password: 111111)</li>
+              <li>Barista 2 (Username: 2, Password: 222222)</li>
+              <li>Manager (Username: 69, Password: 696969)</li>
             </ul>
           </div>
           
