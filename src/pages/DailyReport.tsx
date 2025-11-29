@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { CalendarIcon, Save, ArrowLeft, Trash2 } from "lucide-react";
+import { CalendarIcon, Save, ArrowLeft, Trash2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -45,6 +45,7 @@ export default function DailyReport() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Fetch or create daily report
   const fetchOrCreateReport = useCallback(async (date: Date) => {
@@ -225,6 +226,62 @@ export default function DailyReport() {
     });
   };
 
+  // Submit report
+  const handleSubmitReport = async () => {
+    if (!reportId || isLocked) return;
+    
+    if (!confirm("Are you sure you want to submit this report? Once submitted, it cannot be edited.")) {
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      // Lock the report
+      const { error: updateError } = await supabase
+        .from("daily_reports")
+        .update({ is_locked: true })
+        .eq("id", reportId);
+
+      if (updateError) throw updateError;
+
+      // Get all managers
+      const { data: managers } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "manager");
+
+      if (managers && managers.length > 0) {
+        // Create notifications for all managers
+        const { data: { user } } = await supabase.auth.getUser();
+        const notifications = managers.map(manager => ({
+          user_id: manager.user_id,
+          type: "report_submitted",
+          message: `New daily report submitted by ${user?.email} for ${format(selectedDate, "MMM dd, yyyy")}`,
+          related_id: reportId,
+        }));
+
+        await supabase.from("notifications").insert(notifications);
+      }
+
+      setIsLocked(true);
+      
+      toast({
+        title: "Success",
+        description: "Report submitted successfully",
+      });
+    } catch (error) {
+      console.error("Error submitting report:", error);
+      toast({
+        title: "Error",
+        description: "Failed to submit report",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Delete report
   const handleDeleteReport = async () => {
     if (!reportId || isLocked) return;
@@ -302,10 +359,21 @@ export default function DailyReport() {
             </div>
           )}
           {reportId && !isLocked && (
-            <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete Report
-            </Button>
+            <>
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={handleSubmitReport}
+                disabled={submitting}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {submitting ? "Submitting..." : "Submit Report"}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Report
+              </Button>
+            </>
           )}
         </div>
       </div>
