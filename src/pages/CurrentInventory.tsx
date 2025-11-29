@@ -188,7 +188,7 @@ export default function CurrentInventory() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">Загрузка...</p>
       </div>
     );
   }
@@ -203,11 +203,10 @@ export default function CurrentInventory() {
           <div>
             <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
               <Package className="h-8 w-8" />
-              Current Inventory
+              Текущий инвентарь
             </h1>
             <p className="text-muted-foreground">
-              Real-time inventory levels based on batches, reports, and
-              write-offs
+              Уровни запасов в реальном времени на основе партий, отчётов и списаний
             </p>
           </div>
         </div>
@@ -218,7 +217,7 @@ export default function CurrentInventory() {
               <CardHeader>
                 <CardTitle>{category}</CardTitle>
                 <CardDescription>
-                  Current stock levels for {category.toLowerCase()} items
+                  Текущие уровни запасов для позиций категории {category.toLowerCase()}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -226,20 +225,20 @@ export default function CurrentInventory() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Item</TableHead>
+                        <TableHead>Позиция</TableHead>
                         <TableHead className="text-right">
-                          Total Batches
+                          Всего в партиях
                         </TableHead>
                         <TableHead className="text-right">
-                          Total Write-offs
+                          Всего списаний
                         </TableHead>
                         <TableHead className="text-right">
-                          Latest Stock
+                          Последний остаток
                         </TableHead>
                         <TableHead className="text-right">
-                          Current Level
+                          Текущий уровень
                         </TableHead>
-                        <TableHead className="text-right">Status</TableHead>
+                        <TableHead className="text-right">Статус</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -261,10 +260,10 @@ export default function CurrentInventory() {
                                 )}
                               </div>
                               {hasExpired && (
-                                <p className="text-xs text-destructive">Expired batch detected</p>
+                                <p className="text-xs text-destructive">Обнаружена истёкшая партия</p>
                               )}
                               {!hasExpired && hasExpiring && (
-                                <p className="text-xs text-yellow-600 dark:text-yellow-500">Expiring within 24h</p>
+                                <p className="text-xs text-yellow-600 dark:text-yellow-500">Истекает в течение 24ч</p>
                               )}
                             </TableCell>
                             <TableCell className="text-right">

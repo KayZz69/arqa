@@ -118,8 +118,8 @@ export default function ManagerReports() {
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
-        title: "Error",
-        description: "Failed to load reports",
+        title: "Ошибка",
+        description: "Не удалось загрузить отчёты",
         variant: "destructive",
       });
     } finally {
@@ -137,16 +137,16 @@ export default function ManagerReports() {
       if (error) throw error;
 
       toast({
-        title: "Success",
-        description: `Report ${!currentLockStatus ? "locked" : "unlocked"} successfully`,
+        title: "Успешно",
+        description: `Отчёт ${!currentLockStatus ? "заблокирован" : "разблокирован"} успешно`,
       });
 
       fetchData();
     } catch (error) {
       console.error("Error toggling lock:", error);
       toast({
-        title: "Error",
-        description: "Failed to update report",
+        title: "Ошибка",
+        description: "Не удалось обновить отчёт",
         variant: "destructive",
       });
     }
@@ -170,7 +170,7 @@ export default function ManagerReports() {
 
       // Build CSV
       const csvRows = [
-        ["Date", "Barista", "Category", "Position", "Ending Stock", "Write-off", "Unit"]
+        ["Дата", "Бариста", "Категория", "Позиция", "Остаток", "Списание", "Единица"]
       ];
 
       for (const item of reportItems || []) {
@@ -201,27 +201,27 @@ export default function ManagerReports() {
       document.body.removeChild(link);
 
       toast({
-        title: "Success",
-        description: "Reports exported to CSV",
+        title: "Успешно",
+        description: "Отчёты экспортированы в CSV",
       });
     } catch (error) {
       console.error("Error exporting CSV:", error);
       toast({
-        title: "Error",
-        description: "Failed to export reports",
+        title: "Ошибка",
+        description: "Не удалось экспортировать отчёты",
         variant: "destructive",
       });
     }
   };
 
   const getUserEmail = (userId: string): string => {
-    return users.find((u) => u.id === userId)?.email || "Unknown";
+    return users.find((u) => u.id === userId)?.email || "Неизвестно";
   };
 
   if (roleLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">Загрузка...</p>
       </div>
     );
   }
@@ -240,28 +240,28 @@ export default function ManagerReports() {
           <div className="flex-1">
             <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
               <FileText className="h-8 w-8" />
-              Daily Reports Dashboard
+              Панель отчётов
             </h1>
             <p className="text-muted-foreground">
-              View and manage all barista reports
+              Просмотр и управление всеми отчётами бариста
             </p>
           </div>
           <Button onClick={handleExportCSV} disabled={reports.length === 0}>
             <Download className="h-4 w-4 mr-2" />
-            Export CSV
+            Экспорт в CSV
           </Button>
         </div>
 
         {/* Filters */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>Filter reports by date range and barista</CardDescription>
+            <CardTitle>Фильтры</CardTitle>
+            <CardDescription>Фильтрация отчётов по диапазону дат и бариста</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="start-date">Start Date</Label>
+                <Label htmlFor="start-date">Дата начала</Label>
                 <Input
                   id="start-date"
                   type="date"
@@ -270,7 +270,7 @@ export default function ManagerReports() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="end-date">End Date</Label>
+                <Label htmlFor="end-date">Дата окончания</Label>
                 <Input
                   id="end-date"
                   type="date"
@@ -279,13 +279,13 @@ export default function ManagerReports() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="barista">Barista</Label>
+                <Label htmlFor="barista">Бариста</Label>
                 <Select value={selectedBarista} onValueChange={setSelectedBarista}>
                   <SelectTrigger id="barista">
-                    <SelectValue placeholder="All baristas" />
+                    <SelectValue placeholder="Все бариста" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All baristas</SelectItem>
+                    <SelectItem value="all">Все бариста</SelectItem>
                     {users.map((user) => (
                       <SelectItem key={user.id} value={user.id}>
                         {user.email}
@@ -296,7 +296,7 @@ export default function ManagerReports() {
               </div>
               <div className="flex items-end">
                 <Button onClick={fetchData} className="w-full">
-                  Apply Filters
+                  Применить фильтры
                 </Button>
               </div>
             </div>
@@ -306,9 +306,9 @@ export default function ManagerReports() {
         {/* Reports Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Reports ({reports.length})</CardTitle>
+            <CardTitle>Отчёты ({reports.length})</CardTitle>
             <CardDescription>
-              All submitted daily reports
+              Все отправленные ежедневные отчёты
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -316,18 +316,18 @@ export default function ManagerReports() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Barista</TableHead>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Дата</TableHead>
+                    <TableHead>Бариста</TableHead>
+                    <TableHead>Отправлено</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {reports.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground">
-                        No reports found
+                        Отчёты не найдены
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -342,7 +342,7 @@ export default function ManagerReports() {
                         </TableCell>
                         <TableCell>
                           <Badge variant={report.is_locked ? "secondary" : "default"}>
-                            {report.is_locked ? "Locked" : "Unlocked"}
+                            {report.is_locked ? "Заблокирован" : "Разблокирован"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
