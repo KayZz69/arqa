@@ -1,6 +1,6 @@
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PositionCardProps {
@@ -39,32 +39,56 @@ export function PositionCard({
         </div>
       </div>
       <div>
-        <Label htmlFor={`stock-${position.id}`}>Остаток на конец дня</Label>
-        <Input
-          id={`stock-${position.id}`}
-          type="number"
-          inputMode="decimal"
-          min="0"
-          step="0.01"
-          value={endingStock}
-          onChange={(e) => onChange("ending_stock", e.target.value)}
-          disabled={disabled}
-          className="w-full"
-        />
+        <Label>Остаток на конец дня</Label>
+        <div className="flex items-center gap-2 mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => onChange("ending_stock", Math.max(0, endingStock - 1).toString())}
+            disabled={disabled || endingStock <= 0}
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <div className="flex-1 text-center py-2 px-4 border rounded-md bg-background font-semibold">
+            {endingStock}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => onChange("ending_stock", (endingStock + 1).toString())}
+            disabled={disabled}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <div>
-        <Label htmlFor={`writeoff-${position.id}`}>Списание</Label>
-        <Input
-          id={`writeoff-${position.id}`}
-          type="number"
-          inputMode="decimal"
-          min="0"
-          step="0.01"
-          value={writeOff}
-          onChange={(e) => onChange("write_off", e.target.value)}
-          disabled={disabled}
-          className="w-full"
-        />
+        <Label>Списание</Label>
+        <div className="flex items-center gap-2 mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => onChange("write_off", Math.max(0, writeOff - 1).toString())}
+            disabled={disabled || writeOff <= 0}
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <div className="flex-1 text-center py-2 px-4 border rounded-md bg-background font-semibold">
+            {writeOff}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => onChange("write_off", (writeOff + 1).toString())}
+            disabled={disabled}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );
