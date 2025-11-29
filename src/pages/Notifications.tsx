@@ -66,8 +66,8 @@ export default function Notifications() {
     } catch (error) {
       console.error("Error fetching notifications:", error);
       toast({
-        title: "Error",
-        description: "Failed to load notifications",
+        title: "Ошибка",
+        description: "Не удалось загрузить уведомления",
         variant: "destructive",
       });
     } finally {
@@ -110,14 +110,14 @@ export default function Notifications() {
       );
 
       toast({
-        title: "Success",
-        description: "All notifications marked as read",
+        title: "Успешно",
+        description: "Все уведомления отмечены как прочитанные",
       });
     } catch (error) {
       console.error("Error marking all as read:", error);
       toast({
-        title: "Error",
-        description: "Failed to mark notifications as read",
+        title: "Ошибка",
+        description: "Не удалось отметить уведомления как прочитанные",
         variant: "destructive",
       });
     }
@@ -137,13 +137,13 @@ export default function Notifications() {
   };
 
   if (roleLoading || loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
   }
 
   if (role !== "manager") {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Access denied. Managers only.</p>
+        <p>Доступ запрещён. Только для менеджеров.</p>
       </div>
     );
   }
@@ -163,23 +163,23 @@ export default function Notifications() {
               Notifications
             </h1>
             <p className="text-muted-foreground">
-              {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : "All caught up!"}
+              {unreadCount > 0 ? `${unreadCount} непрочитанных уведомлений` : "Всё прочитано!"}
             </p>
           </div>
         </div>
         {unreadCount > 0 && (
           <Button onClick={markAllAsRead} variant="outline" size="sm">
             <CheckCheck className="h-4 w-4 mr-2" />
-            Mark All as Read
+            Отметить всё прочитанным
           </Button>
         )}
       </div>
 
       {notifications.length === 0 ? (
-        <Card>
+      <Card>
           <CardContent className="py-8 text-center text-muted-foreground">
             <Bell className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No notifications yet</p>
+            <p>Уведомлений пока нет</p>
           </CardContent>
         </Card>
       ) : (
@@ -208,7 +208,7 @@ export default function Notifications() {
                     </div>
                   </div>
                   {!notification.is_read && (
-                    <Badge variant="default">New</Badge>
+                    <Badge variant="default">Новое</Badge>
                   )}
                 </div>
               </CardContent>

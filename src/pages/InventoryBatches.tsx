@@ -117,8 +117,8 @@ export default function InventoryBatches() {
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
-        title: "Error",
-        description: "Failed to load data",
+        title: "Ошибка",
+        description: "Не удалось загрузить данные",
         variant: "destructive",
       });
     } finally {
@@ -211,8 +211,8 @@ export default function InventoryBatches() {
     );
     if (validItems.length === 0) {
       toast({
-        title: "Validation Error",
-        description: "Please add at least one position with quantity",
+        title: "Ошибка валидации",
+        description: "Пожалуйста, добавьте хотя бы одну позицию с количеством",
         variant: "destructive",
       });
       return;
@@ -220,8 +220,8 @@ export default function InventoryBatches() {
 
     if (!arrivalDate) {
       toast({
-        title: "Validation Error",
-        description: "Please select an arrival date",
+        title: "Ошибка валидации",
+        description: "Пожалуйста, выберите дату прибытия",
         variant: "destructive",
       });
       return;
@@ -258,8 +258,8 @@ export default function InventoryBatches() {
       if (error) throw error;
 
       toast({
-        title: "Success",
-        description: `Added ${validItems.length} batch item${validItems.length > 1 ? "s" : ""} successfully`,
+        title: "Успешно",
+        description: `Добавлено ${validItems.length} позиций в партию`,
       });
 
       // Reset form
@@ -271,8 +271,8 @@ export default function InventoryBatches() {
     } catch (error) {
       console.error("Error adding batch:", error);
       toast({
-        title: "Error",
-        description: "Failed to add batch",
+        title: "Ошибка",
+        description: "Не удалось добавить партию",
         variant: "destructive",
       });
     } finally {
@@ -281,7 +281,7 @@ export default function InventoryBatches() {
   };
 
   const handleDelete = async (batchId: string) => {
-    if (!confirm("Are you sure you want to delete this batch?")) return;
+    if (!confirm("Вы уверены, что хотите удалить эту партию?")) return;
 
     try {
       const { error } = await supabase
@@ -292,16 +292,16 @@ export default function InventoryBatches() {
       if (error) throw error;
 
       toast({
-        title: "Success",
-        description: "Batch deleted successfully",
+        title: "Успешно",
+        description: "Партия успешно удалена",
       });
 
       fetchData();
     } catch (error) {
       console.error("Error deleting batch:", error);
       toast({
-        title: "Error",
-        description: "Failed to delete batch",
+        title: "Ошибка",
+        description: "Не удалось удалить партию",
         variant: "destructive",
       });
     }
@@ -340,7 +340,7 @@ export default function InventoryBatches() {
   if (roleLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">Загрузка...</p>
       </div>
     );
   }
@@ -358,10 +358,10 @@ export default function InventoryBatches() {
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-foreground">
-              Inventory Batch Management
+              Управление партиями инвентаря
             </h1>
             <p className="text-muted-foreground">
-              Add multiple positions per batch with automatic expiry calculation
+              Добавление нескольких позиций на партию с автоматическим расчётом срока годности
             </p>
           </div>
         </div>
@@ -372,16 +372,16 @@ export default function InventoryBatches() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Plus className="h-5 w-5" />
-                Add New Batch
+                Добавить новую партию
               </CardTitle>
               <CardDescription>
-                Add multiple items to one batch delivery
+                Добавить несколько позиций в одну партию поставки
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="arrival">Arrival Date</Label>
+                  <Label htmlFor="arrival">Дата прибытия</Label>
                   <Input
                     id="arrival"
                     type="date"
@@ -389,85 +389,85 @@ export default function InventoryBatches() {
                     onChange={(e) => setArrivalDate(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Expiry dates calculated automatically
+                    Сроки годности рассчитываются автоматически
                   </p>
                 </div>
 
                 <div className="space-y-3">
-                  <Label>Positions & Quantities</Label>
+                  <Label>Позиции и количество</Label>
                   {batchItems.map((item, index) => (
-                    <div key={index} className="space-y-2 p-3 border rounded-md">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium">
-                          Item {index + 1}
-                        </span>
-                        {batchItems.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeBatchItem(index)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                      <div key={index} className="space-y-2 p-3 border rounded-md">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">
+                            Позиция {index + 1}
+                          </span>
+                          {batchItems.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeBatchItem(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        <Select
+                          value={item.positionId}
+                          onValueChange={(value) =>
+                            updateBatchItem(index, "positionId", value)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Выберите позицию" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {positions.map((position) => (
+                              <SelectItem key={position.id} value={position.id}>
+                                {position.category} - {position.name}
+                                {position.shelf_life_days && (
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    ({position.shelf_life_days}д)
+                                  </span>
+                                )}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateBatchItem(index, "quantity", e.target.value)
+                          }
+                          placeholder="Количество"
+                        />
+                        {item.positionId && (
+                          <p className="text-xs text-muted-foreground">
+                            Единица:{" "}
+                            {positions.find((p) => p.id === item.positionId)
+                              ?.unit || ""}
+                          </p>
                         )}
                       </div>
-                      <Select
-                        value={item.positionId}
-                        onValueChange={(value) =>
-                          updateBatchItem(index, "positionId", value)
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select position" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {positions.map((position) => (
-                            <SelectItem key={position.id} value={position.id}>
-                              {position.category} - {position.name}
-                              {position.shelf_life_days && (
-                                <span className="text-xs text-muted-foreground ml-1">
-                                  ({position.shelf_life_days}д)
-                                </span>
-                              )}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={item.quantity}
-                        onChange={(e) =>
-                          updateBatchItem(index, "quantity", e.target.value)
-                        }
-                        placeholder="Quantity"
-                      />
-                      {item.positionId && (
-                        <p className="text-xs text-muted-foreground">
-                          Unit:{" "}
-                          {positions.find((p) => p.id === item.positionId)
-                            ?.unit || ""}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addBatchItem}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Another Item
-                  </Button>
-                </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addBatchItem}
+                      className="w-full"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Добавить ещё позицию
+                    </Button>
+                  </div>
 
-                <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting ? "Adding..." : "Add Batch"}
-                </Button>
+                  <Button type="submit" className="w-full" disabled={submitting}>
+                    {submitting ? "Добавление..." : "Добавить партию"}
+                  </Button>
               </form>
             </CardContent>
           </Card>
@@ -475,9 +475,9 @@ export default function InventoryBatches() {
           {/* Batches List */}
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle>Current Batches</CardTitle>
+              <CardTitle>Текущие партии</CardTitle>
               <CardDescription>
-                View and manage existing inventory batches
+                Просмотр и управление существующими партиями инвентаря
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -485,12 +485,12 @@ export default function InventoryBatches() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Position</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Quantity</TableHead>
-                      <TableHead>Arrival</TableHead>
-                      <TableHead>Expiry</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>Позиция</TableHead>
+                      <TableHead>Категория</TableHead>
+                      <TableHead className="text-right">Количество</TableHead>
+                      <TableHead>Прибытие</TableHead>
+                      <TableHead>Истекает</TableHead>
+                      <TableHead className="text-right">Действия</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -500,7 +500,7 @@ export default function InventoryBatches() {
                           colSpan={6}
                           className="text-center text-muted-foreground"
                         >
-                          No batches found
+                          Партии не найдены
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -523,11 +523,11 @@ export default function InventoryBatches() {
                             <TableCell>
                               {status === "expired" ? (
                                 <span className="text-destructive font-semibold">
-                                  {expiryDisplay} (Expired)
+                                  {expiryDisplay} (Истёк)
                                 </span>
                               ) : status === "expiring" ? (
                                 <span className="text-yellow-600 dark:text-yellow-500 font-semibold">
-                                  {expiryDisplay} (Expiring Soon)
+                                  {expiryDisplay} (Истекает скоро)
                                 </span>
                               ) : (
                                 <span>{expiryDisplay}</span>

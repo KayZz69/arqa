@@ -55,7 +55,7 @@ const Positions = () => {
 
   useEffect(() => {
     if (!roleLoading && role !== "manager") {
-      toast.error("Access denied. Manager role required.");
+      toast.error("Доступ запрещён. Требуется роль менеджера.");
       navigate("/");
     }
   }, [role, roleLoading, navigate]);
@@ -75,7 +75,7 @@ const Positions = () => {
       if (error) throw error;
       setPositions(data || []);
     } catch (error: any) {
-      toast.error("Failed to load positions");
+      toast.error("Не удалось загрузить позиции");
       console.error("Error:", error);
     } finally {
       setLoading(false);
@@ -136,7 +136,7 @@ const Positions = () => {
           .eq("id", editingPosition.id);
 
         if (error) throw error;
-        toast.success("Position updated successfully");
+        toast.success("Позиция успешно обновлена");
       } else {
         const { error } = await supabase
           .from("positions")
@@ -149,7 +149,7 @@ const Positions = () => {
           }]);
 
         if (error) throw error;
-        toast.success("Position created successfully");
+        toast.success("Позиция успешно создана");
       }
 
       handleCloseDialog();
@@ -158,7 +158,7 @@ const Positions = () => {
       if (error instanceof z.ZodError) {
         toast.error(error.errors[0].message);
       } else {
-        toast.error("Failed to save position");
+        toast.error("Не удалось сохранить позицию");
         console.error("Error:", error);
       }
     }
@@ -167,7 +167,7 @@ const Positions = () => {
   if (roleLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">Загрузка...</p>
       </div>
     );
   }
@@ -189,44 +189,44 @@ const Positions = () => {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold">Position Management</h1>
-              <p className="text-muted-foreground">Manage inventory positions, categories, and settings</p>
+              <h1 className="text-3xl font-bold">Управление позициями</h1>
+              <p className="text-muted-foreground">Управление позициями инвентаря, категориями и настройками</p>
             </div>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => handleOpenDialog()}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Position
+                Добавить позицию
               </Button>
             </DialogTrigger>
             <DialogContent>
               <form onSubmit={handleSubmit}>
                 <DialogHeader>
-                  <DialogTitle>{editingPosition ? "Edit Position" : "Add New Position"}</DialogTitle>
+                  <DialogTitle>{editingPosition ? "Редактировать позицию" : "Добавить новую позицию"}</DialogTitle>
                   <DialogDescription>
-                    {editingPosition ? "Update the position details" : "Create a new inventory position"}
+                    {editingPosition ? "Обновите детали позиции" : "Создать новую позицию инвентаря"}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="name">Name</Label>
+                    <Label htmlFor="name">Название</Label>
                     <Input
                       id="name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g., Whole Milk"
+                      placeholder="например, Молоко цельное"
                       required
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="category">Category</Label>
+                    <Label htmlFor="category">Категория</Label>
                     <Select
                       value={formData.category}
                       onValueChange={(value) => setFormData({ ...formData, category: value })}
                     >
                       <SelectTrigger id="category">
-                        <SelectValue placeholder="Select category" />
+                        <SelectValue placeholder="Выберите категорию" />
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
                         {CATEGORIES.map((cat) => (
@@ -238,13 +238,13 @@ const Positions = () => {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="unit">Unit</Label>
+                    <Label htmlFor="unit">Единица измерения</Label>
                     <Select
                       value={formData.unit}
                       onValueChange={(value) => setFormData({ ...formData, unit: value })}
                     >
                       <SelectTrigger id="unit">
-                        <SelectValue placeholder="Select unit" />
+                        <SelectValue placeholder="Выберите единицу" />
                       </SelectTrigger>
                       <SelectContent className="bg-background z-50">
                         {UNITS.map((unit) => (
@@ -256,7 +256,7 @@ const Positions = () => {
                     </Select>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="shelf_life_days">Shelf Life (days)</Label>
+                    <Label htmlFor="shelf_life_days">Срок годности (дни)</Label>
                     <Input
                       id="shelf_life_days"
                       type="number"
@@ -266,11 +266,11 @@ const Positions = () => {
                         ...formData, 
                         shelf_life_days: e.target.value ? parseInt(e.target.value) : null 
                       })}
-                      placeholder="Optional"
+                      placeholder="Необязательно"
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="active">Active</Label>
+                    <Label htmlFor="active">Активна</Label>
                     <Switch
                       id="active"
                       checked={formData.active}
@@ -280,10 +280,10 @@ const Positions = () => {
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={handleCloseDialog}>
-                    Cancel
+                    Отмена
                   </Button>
                   <Button type="submit">
-                    {editingPosition ? "Update" : "Create"}
+                    {editingPosition ? "Обновить" : "Создать"}
                   </Button>
                 </DialogFooter>
               </form>
@@ -295,17 +295,17 @@ const Positions = () => {
           <Card key={category}>
             <CardHeader>
               <CardTitle>{category}</CardTitle>
-              <CardDescription>{categoryPositions.length} position(s)</CardDescription>
+              <CardDescription>{categoryPositions.length} позиций</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead>Shelf Life</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Название</TableHead>
+                    <TableHead>Единица</TableHead>
+                    <TableHead>Срок годности</TableHead>
+                    <TableHead>Статус</TableHead>
+                    <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -314,11 +314,11 @@ const Positions = () => {
                       <TableCell className="font-medium">{position.name}</TableCell>
                       <TableCell>{position.unit}</TableCell>
                       <TableCell>
-                        {position.shelf_life_days ? `${position.shelf_life_days} days` : "N/A"}
+                        {position.shelf_life_days ? `${position.shelf_life_days} дней` : "—"}
                       </TableCell>
                       <TableCell>
                         <span className={position.active ? "text-green-600" : "text-muted-foreground"}>
-                          {position.active ? "Active" : "Inactive"}
+                          {position.active ? "Активна" : "Неактивна"}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
@@ -341,10 +341,10 @@ const Positions = () => {
         {positions.length === 0 && (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <p className="text-muted-foreground mb-4">No positions created yet</p>
+              <p className="text-muted-foreground mb-4">Позиции ещё не созданы</p>
               <Button onClick={() => handleOpenDialog()}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add First Position
+                Добавить первую позицию
               </Button>
             </CardContent>
           </Card>
