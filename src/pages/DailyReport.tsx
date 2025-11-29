@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
-import { CalendarIcon, Save, ArrowLeft, Trash2, Send, Lock, Unlock } from "lucide-react";
+import { CalendarIcon, ArrowLeft, Trash2, Send, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -48,11 +48,10 @@ export default function DailyReport() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [reportItems, setReportItems] = useState<Record<string, ReportItem>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchOrCreateReport = useCallback(async (date: Date) => {
+  const fetchReport = useCallback(async (date: Date) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -94,51 +93,13 @@ export default function DailyReport() {
           setReportItems(itemsMap);
         }
       } else {
-        // Only baristas can create new reports
-        if (role !== "manager") {
-          const { data: newReport, error } = await supabase
-            .from("daily_reports")
-            .insert({
-              barista_id: user.id,
-              report_date: dateString,
-              is_locked: false,
-            })
-            .select()
-            .single();
-
-          if (error) {
-            // Check if it's a duplicate error
-            if (error.code === "23505") {
-              // Report already exists, try to fetch it again
-              const { data: retryReport } = await supabase
-                .from("daily_reports")
-                .select("*")
-                .eq("barista_id", user.id)
-                .eq("report_date", dateString)
-                .maybeSingle();
-              
-              if (retryReport) {
-                setReportId(retryReport.id);
-                setIsLocked(retryReport.is_locked);
-                setReportItems({});
-                return;
-              }
-            }
-            throw error;
-          }
-          
-          setReportId(newReport.id);
-          setIsLocked(false);
-          setReportItems({});
-        } else {
-          // No report exists for this date
-          setReportId(null);
-          setIsLocked(false);
-          setReportItems({});
-        }
+        // No report exists yet
+        setReportId(null);
+        setIsLocked(false);
+        setReportItems({});
       }
     } catch (error) {
-      console.error("Error fetching/creating report:", error);
+      console.error("Error fetching report:", error);
       toast({
         title: "Ошибка",
         description: "Не удалось загрузить отчёт",
@@ -176,17 +137,16 @@ export default function DailyReport() {
 
   useEffect(() => {
     if (selectedDate) {
-      fetchOrCreateReport(selectedDate);
+      fetchReport(selectedDate);
     }
-  }, [selectedDate, fetchOrCreateReport]);
+  }, [selectedDate, fetchReport]);
 
   const saveReportItem = useCallback(async (positionId: string, data: Omit<ReportItem, "position_id">) => {
-    // Managers can edit even locked reports
+    // Only managers can edit locked reports
     if (!reportId || (isLocked && role !== "manager")) return;
 
     try {
       reportItemSchema.parse(data);
-      setSaving(true);
 
       const itemData = {
         report_id: reportId,
@@ -202,7 +162,6 @@ export default function DailyReport() {
           .eq("id", data.id);
         if (error) throw error;
       } else {
-        // Use upsert to handle duplicates
         const { data: upsertedItem, error } = await supabase
           .from("report_items")
           .upsert(itemData, {
@@ -232,8 +191,6 @@ export default function DailyReport() {
           variant: "destructive",
         });
       }
-    } finally {
-      setSaving(false);
     }
   }, [reportId, isLocked, role, toast]);
 
@@ -244,43 +201,96 @@ export default function DailyReport() {
       const current = prev[positionId] || { position_id: positionId, ending_stock: 0, write_off: 0 };
       const updated = { ...current, [field]: numValue };
       
-      setTimeout(() => {
-        saveReportItem(positionId, updated);
-      }, 1000);
+      // For managers editing locked reports, save immediately
+      if (reportId && isLocked && role === "manager") {
+        setTimeout(() => {
+          saveReportItem(positionId, updated);
+        }, 1000);
+      }
       
       return { ...prev, [positionId]: updated };
     });
   };
 
   const handleSubmitReport = async () => {
-    if (!reportId || isLocked) return;
+    if (isLocked && role !== "manager") return;
     
+    // Check if there are any items to submit
+    const hasItems = Object.keys(reportItems).length > 0;
+    if (!hasItems) {
+      toast({
+        title: "Ошибка",
+        description: "Пожалуйста, заполните хотя бы одну позицию",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!confirm("Вы уверены, что хотите отправить этот отчёт? После отправки его нельзя будет редактировать.")) {
       return;
     }
 
     try {
       setSubmitting(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Пользователь не авторизован");
 
-      const { error: updateError } = await supabase
-        .from("daily_reports")
-        .update({ is_locked: true })
-        .eq("id", reportId);
+      const dateString = format(selectedDate, "yyyy-MM-dd");
 
-      if (updateError) throw updateError;
+      // Create the report if it doesn't exist
+      let currentReportId = reportId;
+      if (!currentReportId) {
+        const { data: newReport, error: createError } = await supabase
+          .from("daily_reports")
+          .insert({
+            barista_id: user.id,
+            report_date: dateString,
+            is_locked: true,
+          })
+          .select()
+          .single();
 
+        if (createError) throw createError;
+        currentReportId = newReport.id;
+        setReportId(currentReportId);
+      } else {
+        // Update existing report to locked
+        const { error: updateError } = await supabase
+          .from("daily_reports")
+          .update({ is_locked: true })
+          .eq("id", currentReportId);
+
+        if (updateError) throw updateError;
+      }
+
+      // Save all report items
+      const itemsToInsert = Object.values(reportItems).map(item => ({
+        report_id: currentReportId,
+        position_id: item.position_id,
+        ending_stock: item.ending_stock,
+        write_off: item.write_off,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("report_items")
+        .upsert(itemsToInsert, {
+          onConflict: "report_id,position_id"
+        });
+
+      if (itemsError) throw itemsError;
+
+      // Send notifications to managers
       const { data: managers } = await supabase
         .from("user_roles")
         .select("user_id")
         .eq("role", "manager");
 
       if (managers && managers.length > 0) {
-        const { data: { user } } = await supabase.auth.getUser();
         const notifications = managers.map(manager => ({
           user_id: manager.user_id,
           type: "report_submitted",
           message: `Новый ежедневный отчёт отправлен пользователем ${user?.email} за ${format(selectedDate, "dd MMM yyyy", { locale: ru })}`,
-          related_id: reportId,
+          related_id: currentReportId,
         }));
 
         await supabase.from("notifications").insert(notifications);
@@ -305,37 +315,56 @@ export default function DailyReport() {
   };
 
   const handleDeleteReport = async () => {
-    // Managers can delete any report, baristas can only delete their own unlocked reports
-    if (!reportId) return;
-    if (role !== "manager" && isLocked) return;
-    
-    if (!confirm("Вы уверены, что хотите удалить этот отчёт? Это удалит все элементы в отчёте.")) {
+    // Managers can delete any report, baristas can only delete draft reports
+    if (!reportId && role === "barista" && Object.keys(reportItems).length === 0) {
+      toast({
+        title: "Информация",
+        description: "Нет черновика для удаления",
+      });
       return;
     }
 
-    try {
-      const { error } = await supabase
-        .from("daily_reports")
-        .delete()
-        .eq("id", reportId);
+    if (reportId) {
+      // Delete submitted report (only managers can do this)
+      if (role !== "manager" && isLocked) return;
+      
+      if (!confirm("Вы уверены, что хотите удалить этот отчёт? Это удалит все элементы в отчёте.")) {
+        return;
+      }
 
-      if (error) throw error;
+      try {
+        const { error } = await supabase
+          .from("daily_reports")
+          .delete()
+          .eq("id", reportId);
 
+        if (error) throw error;
+
+        toast({
+          title: "Успешно",
+          description: "Отчёт успешно удалён",
+        });
+
+        setReportId(null);
+        setReportItems({});
+        setIsLocked(false);
+      } catch (error) {
+        console.error("Error deleting report:", error);
+        toast({
+          title: "Ошибка",
+          description: "Не удалось удалить отчёт",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // Clear draft data
+      if (!confirm("Вы уверены, что хотите очистить черновик?")) {
+        return;
+      }
+      setReportItems({});
       toast({
         title: "Успешно",
-        description: "Отчёт успешно удалён",
-      });
-
-      setReportId(null);
-      setReportItems({});
-      setIsLocked(false);
-      navigate("/");
-    } catch (error) {
-      console.error("Error deleting report:", error);
-      toast({
-        title: "Ошибка",
-        description: "Не удалось удалить отчёт",
-        variant: "destructive",
+        description: "Черновик очищен",
       });
     }
   };
@@ -398,12 +427,6 @@ export default function DailyReport() {
           <h1 className="text-3xl font-bold">Ежедневный отчёт</h1>
         </div>
         <div className="flex items-center gap-4">
-          {saving && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Save className="h-4 w-4 animate-pulse" />
-              Сохранение...
-            </div>
-          )}
           {reportId && role === "manager" && (
             <Button 
               variant={isLocked ? "outline" : "secondary"} 
@@ -423,18 +446,24 @@ export default function DailyReport() {
               )}
             </Button>
           )}
-          {reportId && role === "barista" && !isLocked && (
-            <Button 
-              variant="default" 
-              size="sm" 
-              onClick={handleSubmitReport}
-              disabled={submitting}
-            >
-              <Send className="h-4 w-4 mr-2" />
-              {submitting ? "Отправка..." : "Отправить отчёт"}
-            </Button>
+          {role === "barista" && !isLocked && (
+            <>
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={handleSubmitReport}
+                disabled={submitting}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {submitting ? "Отправка..." : "Отправить отчёт"}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                {reportId ? "Удалить отчёт" : "Очистить черновик"}
+              </Button>
+            </>
           )}
-          {reportId && ((role === "barista" && !isLocked) || role === "manager") && (
+          {reportId && role === "manager" && (
             <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
               <Trash2 className="h-4 w-4 mr-2" />
               Удалить отчёт
@@ -483,9 +512,19 @@ export default function DailyReport() {
               Этот отчёт заблокирован. Вы можете разблокировать его для редактирования.
             </p>
           )}
-          {!isLocked && reportId && (
+          {!reportId && role === "barista" && (
             <p className="mt-2 text-sm text-muted-foreground">
-              Этот отчёт можно редактировать. Изменения сохраняются автоматически.
+              Заполните данные и нажмите "Отправить отчёт" для сохранения.
+            </p>
+          )}
+          {reportId && isLocked && role === "barista" && (
+            <p className="mt-2 text-sm text-destructive">
+              Этот отчёт заблокирован и не может быть изменён.
+            </p>
+          )}
+          {reportId && isLocked && role === "manager" && (
+            <p className="mt-2 text-sm text-warning">
+              Этот отчёт заблокирован. Изменения сохраняются автоматически.
             </p>
           )}
         </CardContent>
