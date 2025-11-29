@@ -111,6 +111,9 @@ export default function InventoryBatches() {
 
       if (batchesError) throw batchesError;
       setBatches(batchesData || []);
+      
+      // Check for expiring/expired batches and notify managers
+      await checkAndNotifyExpiringBatches(batchesData || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -120,6 +123,53 @@ export default function InventoryBatches() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkAndNotifyExpiringBatches = async (batchData: InventoryBatch[]) => {
+    try {
+      const now = new Date();
+      const oneDayFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      
+      // Get all managers
+      const { data: managers } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "manager");
+
+      if (!managers || managers.length === 0) return;
+
+      const notifications = [];
+      
+      for (const batch of batchData) {
+        if (!batch.expiry_date) continue;
+        
+        const expiryDate = new Date(batch.expiry_date);
+        const isExpired = expiryDate < now;
+        const isExpiringSoon = expiryDate >= now && expiryDate <= oneDayFromNow;
+        
+        if (isExpired || isExpiringSoon) {
+          const message = isExpired
+            ? `Batch expired: ${batch.positions.name} (${batch.quantity} ${batch.positions.unit}) expired on ${format(expiryDate, "MMM dd, yyyy")}`
+            : `Batch expiring soon: ${batch.positions.name} (${batch.quantity} ${batch.positions.unit}) expires on ${format(expiryDate, "MMM dd, yyyy")}`;
+
+          // Create notification for each manager
+          for (const manager of managers) {
+            notifications.push({
+              user_id: manager.user_id,
+              type: isExpired ? "batch_expired" : "batch_expiring",
+              message,
+              related_id: batch.id,
+            });
+          }
+        }
+      }
+
+      if (notifications.length > 0) {
+        await supabase.from("notifications").insert(notifications);
+      }
+    } catch (error) {
+      console.error("Error creating notifications:", error);
     }
   };
 
@@ -269,6 +319,22 @@ export default function InventoryBatches() {
       return calculated ? format(new Date(calculated), "dd.MM.yyyy") : "—";
     }
     return "—";
+  };
+
+  const getExpiryStatus = (batch: InventoryBatch) => {
+    const expiryDateStr = batch.expiry_date || (batch.positions.shelf_life_days 
+      ? calculateExpiryDate(batch.arrival_date, batch.positions.shelf_life_days) 
+      : null);
+    
+    if (!expiryDateStr) return "normal";
+    
+    const expiryDate = new Date(expiryDateStr);
+    const now = new Date();
+    const oneDayFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    
+    if (expiryDate < now) return "expired";
+    if (expiryDate <= oneDayFromNow) return "expiring";
+    return "normal";
   };
 
   if (roleLoading || loading) {
@@ -438,30 +504,47 @@ export default function InventoryBatches() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      batches.map((batch) => (
-                        <TableRow key={batch.id}>
-                          <TableCell className="font-medium">
-                            {batch.positions.name}
-                          </TableCell>
-                          <TableCell>{batch.positions.category}</TableCell>
-                          <TableCell className="text-right">
-                            {batch.quantity} {batch.positions.unit}
-                          </TableCell>
-                          <TableCell>
-                            {format(new Date(batch.arrival_date), "dd.MM.yyyy")}
-                          </TableCell>
-                          <TableCell>{getExpiryDisplay(batch)}</TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(batch.id)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      batches.map((batch) => {
+                        const status = getExpiryStatus(batch);
+                        const expiryDisplay = getExpiryDisplay(batch);
+                        
+                        return (
+                          <TableRow key={batch.id}>
+                            <TableCell className="font-medium">
+                              {batch.positions.name}
+                            </TableCell>
+                            <TableCell>{batch.positions.category}</TableCell>
+                            <TableCell className="text-right">
+                              {batch.quantity} {batch.positions.unit}
+                            </TableCell>
+                            <TableCell>
+                              {format(new Date(batch.arrival_date), "dd.MM.yyyy")}
+                            </TableCell>
+                            <TableCell>
+                              {status === "expired" ? (
+                                <span className="text-destructive font-semibold">
+                                  {expiryDisplay} (Expired)
+                                </span>
+                              ) : status === "expiring" ? (
+                                <span className="text-yellow-600 dark:text-yellow-500 font-semibold">
+                                  {expiryDisplay} (Expiring Soon)
+                                </span>
+                              ) : (
+                                <span>{expiryDisplay}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDelete(batch.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>

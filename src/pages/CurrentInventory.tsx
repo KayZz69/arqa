@@ -19,13 +19,21 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { ArrowLeft, Package } from "lucide-react";
+import { ArrowLeft, Package, AlertTriangle } from "lucide-react";
+import { format, addDays } from "date-fns";
 
 interface Position {
   id: string;
   name: string;
   category: string;
   unit: string;
+  shelf_life_days: number | null;
+}
+
+interface BatchInfo {
+  arrival_date: string;
+  expiry_date: string | null;
+  quantity: number;
 }
 
 interface InventoryLevel {
@@ -34,6 +42,7 @@ interface InventoryLevel {
   totalWriteOffs: number;
   latestEndingStock: number | null;
   calculatedInventory: number;
+  batches: BatchInfo[];
 }
 
 export default function CurrentInventory() {
@@ -60,10 +69,10 @@ export default function CurrentInventory() {
       // Calculate inventory levels for each position
       const levels: InventoryLevel[] = await Promise.all(
         (positions || []).map(async (position) => {
-          // Get total batch quantities
+          // Get batch quantities with dates
           const { data: batches } = await supabase
             .from("inventory_batches")
-            .select("quantity")
+            .select("quantity, arrival_date, expiry_date")
             .eq("position_id", position.id);
 
           const totalBatches =
@@ -108,6 +117,7 @@ export default function CurrentInventory() {
             totalWriteOffs,
             latestEndingStock,
             calculatedInventory,
+            batches: batches || [],
           };
         })
       );
@@ -142,6 +152,24 @@ export default function CurrentInventory() {
       case "good":
         return "secondary";
     }
+  };
+
+  const getBatchExpiryStatus = (batches: BatchInfo[]) => {
+    const now = new Date();
+    const oneDayFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    
+    let hasExpired = false;
+    let hasExpiring = false;
+    
+    for (const batch of batches) {
+      if (batch.expiry_date) {
+        const expiryDate = new Date(batch.expiry_date);
+        if (expiryDate < now) hasExpired = true;
+        else if (expiryDate <= oneDayFromNow) hasExpiring = true;
+      }
+    }
+    
+    return { hasExpired, hasExpiring };
   };
 
   // Group by category
@@ -219,10 +247,25 @@ export default function CurrentInventory() {
                         const status = getInventoryStatus(
                           item.calculatedInventory
                         );
+                        const { hasExpired, hasExpiring } = getBatchExpiryStatus(item.batches);
+                        
                         return (
                           <TableRow key={item.position.id}>
                             <TableCell className="font-medium">
-                              {item.position.name}
+                              <div className="flex items-center gap-2">
+                                {item.position.name}
+                                {(hasExpired || hasExpiring) && (
+                                  <AlertTriangle 
+                                    className={`h-4 w-4 ${hasExpired ? 'text-destructive' : 'text-yellow-600 dark:text-yellow-500'}`}
+                                  />
+                                )}
+                              </div>
+                              {hasExpired && (
+                                <p className="text-xs text-destructive">Expired batch detected</p>
+                              )}
+                              {!hasExpired && hasExpiring && (
+                                <p className="text-xs text-yellow-600 dark:text-yellow-500">Expiring within 24h</p>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
                               {item.totalBatches.toFixed(2)}{" "}

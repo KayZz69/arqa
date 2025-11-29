@@ -3,19 +3,63 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useUserRole } from "@/hooks/useUserRole";
 import { toast } from "sonner";
+import { Bell } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
   const { role, loading } = useUserRole();
   const [user, setUser] = useState<any>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
+      if (user && role === "manager") {
+        fetchUnreadCount(user.id);
+      }
     });
-  }, []);
+  }, [role]);
+
+  useEffect(() => {
+    if (role === "manager" && user) {
+      // Subscribe to new notifications
+      const channel = supabase
+        .channel("notifications-badge")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+          },
+          () => {
+            fetchUnreadCount(user.id);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [role, user]);
+
+  const fetchUnreadCount = async (userId: string) => {
+    try {
+      const { count } = await supabase
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("is_read", false);
+
+      setUnreadCount(count || 0);
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -78,7 +122,7 @@ const Index = () => {
         )}
 
         {role === "manager" && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader>
                 <CardTitle>All Reports</CardTitle>
@@ -104,6 +148,25 @@ const Index = () => {
               </CardHeader>
               <CardContent>
                 <Button className="w-full" onClick={() => navigate("/current-inventory")}>View Inventory</Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell className="h-5 w-5" />
+                  Notifications
+                  {unreadCount > 0 && (
+                    <Badge variant="destructive" className="ml-auto">
+                      {unreadCount}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>View batch and report alerts</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" onClick={() => navigate("/notifications")}>
+                  View Notifications
+                </Button>
               </CardContent>
             </Card>
             <Card>
