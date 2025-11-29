@@ -69,7 +69,7 @@ const Index = () => {
                 <CardDescription>View current inventory levels</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" variant="outline">
+                <Button className="w-full" variant="outline" onClick={() => navigate("/current-inventory")}>
                   View Inventory
                 </Button>
               </CardContent>
@@ -78,7 +78,7 @@ const Index = () => {
         )}
 
         {role === "manager" && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader>
                 <CardTitle>All Reports</CardTitle>
@@ -90,11 +90,20 @@ const Index = () => {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Inventory Management</CardTitle>
-                <CardDescription>Manage inventory batches</CardDescription>
+                <CardTitle>Inventory Batches</CardTitle>
+                <CardDescription>Add and manage inventory batches</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full">Manage Inventory</Button>
+                <Button className="w-full" onClick={() => navigate("/inventory-batches")}>Manage Batches</Button>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Current Inventory</CardTitle>
+                <CardDescription>View real-time inventory levels</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button className="w-full" onClick={() => navigate("/current-inventory")}>View Inventory</Button>
               </CardContent>
             </Card>
             <Card>

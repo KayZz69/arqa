@@ -9,6 +9,8 @@ import Login from "./pages/Login";
 import Setup from "./pages/Setup";
 import Positions from "./pages/Positions";
 import DailyReport from "./pages/DailyReport";
+import InventoryBatches from "./pages/InventoryBatches";
+import CurrentInventory from "./pages/CurrentInventory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +45,22 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <DailyReport />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory-batches"
+            element={
+              <ProtectedRoute>
+                <InventoryBatches />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/current-inventory"
+            element={
+              <ProtectedRoute>
+                <CurrentInventory />
               </ProtectedRoute>
             }
           />
