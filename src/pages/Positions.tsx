@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Plus, Pencil, ArrowLeft } from "lucide-react";
 import { z } from "zod";
 
-const CATEGORIES = ["Выпечка", "Кухня", "Ингредиент", "Расходник"] as const;
+const CATEGORIES = ["Выпечка", "Кухня", "Ингредиент", "Расходник", "Пицца"] as const;
 const UNITS = ["кг", "л", "шт", "г", "мл", "уп"] as const;
 
 const positionSchema = z.object({
