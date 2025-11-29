@@ -10,13 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { ru } from "date-fns/locale";
 import { CalendarIcon, Save, ArrowLeft, Trash2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
 const reportItemSchema = z.object({
-  ending_stock: z.coerce.number().min(0, "Must be 0 or greater"),
-  write_off: z.coerce.number().min(0, "Must be 0 or greater"),
+  ending_stock: z.coerce.number().min(0, "Должно быть 0 или больше"),
+  write_off: z.coerce.number().min(0, "Должно быть 0 или больше"),
 });
 
 type Position = {
@@ -47,7 +48,6 @@ export default function DailyReport() {
   const [isLocked, setIsLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch or create daily report
   const fetchOrCreateReport = useCallback(async (date: Date) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -55,7 +55,6 @@ export default function DailyReport() {
 
       const dateString = format(date, "yyyy-MM-dd");
 
-      // Check if report exists
       const { data: existingReport } = await supabase
         .from("daily_reports")
         .select("*")
@@ -67,7 +66,6 @@ export default function DailyReport() {
         setReportId(existingReport.id);
         setIsLocked(existingReport.is_locked);
         
-        // Fetch existing report items
         const { data: items } = await supabase
           .from("report_items")
           .select("*")
@@ -86,7 +84,6 @@ export default function DailyReport() {
           setReportItems(itemsMap);
         }
       } else {
-        // Create new report
         const { data: newReport, error } = await supabase
           .from("daily_reports")
           .insert({
@@ -106,14 +103,13 @@ export default function DailyReport() {
     } catch (error) {
       console.error("Error fetching/creating report:", error);
       toast({
-        title: "Error",
-        description: "Failed to load report",
+        title: "Ошибка",
+        description: "Не удалось загрузить отчёт",
         variant: "destructive",
       });
     }
   }, [toast]);
 
-  // Fetch active positions
   useEffect(() => {
     const fetchPositions = async () => {
       try {
@@ -129,8 +125,8 @@ export default function DailyReport() {
       } catch (error) {
         console.error("Error fetching positions:", error);
         toast({
-          title: "Error",
-          description: "Failed to load positions",
+          title: "Ошибка",
+          description: "Не удалось загрузить позиции",
           variant: "destructive",
         });
       } finally {
@@ -141,21 +137,17 @@ export default function DailyReport() {
     fetchPositions();
   }, [toast]);
 
-  // Fetch/create report when date changes
   useEffect(() => {
     if (selectedDate) {
       fetchOrCreateReport(selectedDate);
     }
   }, [selectedDate, fetchOrCreateReport]);
 
-  // Auto-save report item
   const saveReportItem = useCallback(async (positionId: string, data: Omit<ReportItem, "position_id">) => {
     if (!reportId || isLocked) return;
 
     try {
-      // Validate data
       reportItemSchema.parse(data);
-
       setSaving(true);
 
       const itemData = {
@@ -166,15 +158,12 @@ export default function DailyReport() {
       };
 
       if (data.id) {
-        // Update existing
         const { error } = await supabase
           .from("report_items")
           .update(itemData)
           .eq("id", data.id);
-
         if (error) throw error;
       } else {
-        // Insert new
         const { data: newItem, error } = await supabase
           .from("report_items")
           .insert(itemData)
@@ -182,8 +171,6 @@ export default function DailyReport() {
           .single();
 
         if (error) throw error;
-
-        // Update local state with new id
         setReportItems(prev => ({
           ...prev,
           [positionId]: { ...itemData, id: newItem.id },
@@ -192,15 +179,15 @@ export default function DailyReport() {
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({
-          title: "Validation Error",
+          title: "Ошибка валидации",
           description: error.errors[0].message,
           variant: "destructive",
         });
       } else {
         console.error("Error saving report item:", error);
         toast({
-          title: "Error",
-          description: "Failed to save item",
+          title: "Ошибка",
+          description: "Не удалось сохранить элемент",
           variant: "destructive",
         });
       }
@@ -209,7 +196,6 @@ export default function DailyReport() {
     }
   }, [reportId, isLocked, toast]);
 
-  // Handle input change with debounce
   const handleInputChange = (positionId: string, field: "ending_stock" | "write_off", value: string) => {
     const numValue = parseFloat(value) || 0;
     
@@ -217,7 +203,6 @@ export default function DailyReport() {
       const current = prev[positionId] || { position_id: positionId, ending_stock: 0, write_off: 0 };
       const updated = { ...current, [field]: numValue };
       
-      // Debounce auto-save
       setTimeout(() => {
         saveReportItem(positionId, updated);
       }, 1000);
@@ -226,18 +211,16 @@ export default function DailyReport() {
     });
   };
 
-  // Submit report
   const handleSubmitReport = async () => {
     if (!reportId || isLocked) return;
     
-    if (!confirm("Are you sure you want to submit this report? Once submitted, it cannot be edited.")) {
+    if (!confirm("Вы уверены, что хотите отправить этот отчёт? После отправки его нельзя будет редактировать.")) {
       return;
     }
 
     try {
       setSubmitting(true);
 
-      // Lock the report
       const { error: updateError } = await supabase
         .from("daily_reports")
         .update({ is_locked: true })
@@ -245,19 +228,17 @@ export default function DailyReport() {
 
       if (updateError) throw updateError;
 
-      // Get all managers
       const { data: managers } = await supabase
         .from("user_roles")
         .select("user_id")
         .eq("role", "manager");
 
       if (managers && managers.length > 0) {
-        // Create notifications for all managers
         const { data: { user } } = await supabase.auth.getUser();
         const notifications = managers.map(manager => ({
           user_id: manager.user_id,
           type: "report_submitted",
-          message: `New daily report submitted by ${user?.email} for ${format(selectedDate, "MMM dd, yyyy")}`,
+          message: `Новый ежедневный отчёт отправлен пользователем ${user?.email} за ${format(selectedDate, "dd MMM yyyy", { locale: ru })}`,
           related_id: reportId,
         }));
 
@@ -267,14 +248,14 @@ export default function DailyReport() {
       setIsLocked(true);
       
       toast({
-        title: "Success",
-        description: "Report submitted successfully",
+        title: "Успешно",
+        description: "Отчёт успешно отправлен",
       });
     } catch (error) {
       console.error("Error submitting report:", error);
       toast({
-        title: "Error",
-        description: "Failed to submit report",
+        title: "Ошибка",
+        description: "Не удалось отправить отчёт",
         variant: "destructive",
       });
     } finally {
@@ -282,16 +263,14 @@ export default function DailyReport() {
     }
   };
 
-  // Delete report
   const handleDeleteReport = async () => {
     if (!reportId || isLocked) return;
     
-    if (!confirm("Are you sure you want to delete this report? This will delete all items in the report.")) {
+    if (!confirm("Вы уверены, что хотите удалить этот отчёт? Это удалит все элементы в отчёте.")) {
       return;
     }
 
     try {
-      // Delete report (cascade will delete report_items)
       const { error } = await supabase
         .from("daily_reports")
         .delete()
@@ -300,28 +279,24 @@ export default function DailyReport() {
       if (error) throw error;
 
       toast({
-        title: "Success",
-        description: "Report deleted successfully",
+        title: "Успешно",
+        description: "Отчёт успешно удалён",
       });
 
-      // Reset state
       setReportId(null);
       setReportItems({});
       setIsLocked(false);
-      
-      // Redirect to home
       navigate("/");
     } catch (error) {
       console.error("Error deleting report:", error);
       toast({
-        title: "Error",
-        description: "Failed to delete report",
+        title: "Ошибка",
+        description: "Не удалось удалить отчёт",
         variant: "destructive",
       });
     }
   };
 
-  // Group positions by category
   const groupedPositions = positions.reduce((acc, position) => {
     if (!acc[position.category]) {
       acc[position.category] = [];
@@ -331,13 +306,13 @@ export default function DailyReport() {
   }, {} as Record<string, Position[]>);
 
   if (roleLoading || loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
   }
 
   if (role !== "barista") {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Access denied. Baristas only.</p>
+        <p>Доступ запрещён. Только для бариста.</p>
       </div>
     );
   }
@@ -349,13 +324,13 @@ export default function DailyReport() {
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-3xl font-bold">Daily Report</h1>
+          <h1 className="text-3xl font-bold">Ежедневный отчёт</h1>
         </div>
         <div className="flex items-center gap-4">
           {saving && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Save className="h-4 w-4 animate-pulse" />
-              Saving...
+              Сохранение...
             </div>
           )}
           {reportId && !isLocked && (
@@ -367,11 +342,11 @@ export default function DailyReport() {
                 disabled={submitting}
               >
                 <Send className="h-4 w-4 mr-2" />
-                {submitting ? "Submitting..." : "Submit Report"}
+                {submitting ? "Отправка..." : "Отправить отчёт"}
               </Button>
               <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
                 <Trash2 className="h-4 w-4 mr-2" />
-                Delete Report
+                Удалить отчёт
               </Button>
             </>
           )}
@@ -380,7 +355,7 @@ export default function DailyReport() {
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Select Report Date</CardTitle>
+          <CardTitle>Выберите дату отчёта</CardTitle>
         </CardHeader>
         <CardContent>
           <Popover>
@@ -394,7 +369,7 @@ export default function DailyReport() {
                 disabled={isLocked}
               >
                 <CalendarIcon />
-                {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
+                {selectedDate ? format(selectedDate, "PPP", { locale: ru }) : <span>Выберите дату</span>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -404,17 +379,18 @@ export default function DailyReport() {
                 onSelect={(date) => date && setSelectedDate(date)}
                 initialFocus
                 className="pointer-events-auto"
+                locale={ru}
               />
             </PopoverContent>
           </Popover>
           {isLocked && (
             <p className="mt-2 text-sm text-destructive">
-              This report is locked and cannot be edited or deleted.
+              Этот отчёт заблокирован и не может быть изменён или удалён.
             </p>
           )}
           {!isLocked && reportId && (
             <p className="mt-2 text-sm text-muted-foreground">
-              This report is editable. Changes are auto-saved.
+              Этот отчёт можно редактировать. Изменения сохраняются автоматически.
             </p>
           )}
         </CardContent>
@@ -442,7 +418,7 @@ export default function DailyReport() {
                         <p className="text-sm text-muted-foreground">{position.unit}</p>
                       </div>
                       <div>
-                        <Label htmlFor={`stock-${position.id}`}>Ending Stock</Label>
+                        <Label htmlFor={`stock-${position.id}`}>Остаток на конец дня</Label>
                         <Input
                           id={`stock-${position.id}`}
                           type="number"
@@ -454,7 +430,7 @@ export default function DailyReport() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor={`writeoff-${position.id}`}>Write-off</Label>
+                        <Label htmlFor={`writeoff-${position.id}`}>Списание</Label>
                         <Input
                           id={`writeoff-${position.id}`}
                           type="number"

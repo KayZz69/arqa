@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useDisplayName } from "@/hooks/useDisplayName";
 import { toast } from "sonner";
 import { Bell } from "lucide-react";
 
@@ -13,6 +14,7 @@ const Index = () => {
   const { role, loading } = useUserRole();
   const [user, setUser] = useState<any>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const { displayName } = useDisplayName(user?.id);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -63,12 +65,12 @@ const Index = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    toast.success("Logged out successfully");
+    toast.success("Вы успешно вышли из системы");
     navigate("/login");
   };
 
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
+    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
   }
 
   return (
@@ -76,21 +78,21 @@ const Index = () => {
       <div className="mx-auto max-w-4xl">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold">Inventory Management</h1>
-            <p className="text-muted-foreground">Welcome, {user?.email}</p>
-            {role && <p className="text-sm text-muted-foreground">Role: {role}</p>}
+            <h1 className="text-4xl font-bold">Управление инвентарём</h1>
+            <p className="text-muted-foreground">Добро пожаловать, {displayName || user?.email}</p>
+            {role && <p className="text-sm text-muted-foreground">Роль: {role === "barista" ? "Бариста" : "Менеджер"}</p>}
           </div>
           <Button onClick={handleLogout} variant="outline">
-            Logout
+            Выход
           </Button>
         </div>
 
         {!role && (
           <Card>
             <CardHeader>
-              <CardTitle>No Role Assigned</CardTitle>
+              <CardTitle>Роль не назначена</CardTitle>
               <CardDescription>
-                Please contact an administrator to assign you a role (barista or manager)
+                Пожалуйста, свяжитесь с администратором для назначения роли (бариста или менеджер)
               </CardDescription>
             </CardHeader>
           </Card>
@@ -100,21 +102,21 @@ const Index = () => {
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle>Daily Reports</CardTitle>
-                <CardDescription>Create and view your daily inventory reports</CardDescription>
+                <CardTitle>Ежедневные отчёты</CardTitle>
+                <CardDescription>Создавайте и просматривайте ваши ежедневные отчёты по инвентарю</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => navigate("/daily-report")}>Create New Report</Button>
+                <Button className="w-full" onClick={() => navigate("/daily-report")}>Создать новый отчёт</Button>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Inventory</CardTitle>
-                <CardDescription>View current inventory levels</CardDescription>
+                <CardTitle>Инвентарь</CardTitle>
+                <CardDescription>Просмотр текущего уровня запасов</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button className="w-full" variant="outline" onClick={() => navigate("/current-inventory")}>
-                  View Inventory
+                  Просмотреть инвентарь
                 </Button>
               </CardContent>
             </Card>
@@ -125,58 +127,58 @@ const Index = () => {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader>
-                <CardTitle>All Reports</CardTitle>
-                <CardDescription>View and manage all daily reports</CardDescription>
+                <CardTitle>Все отчёты</CardTitle>
+                <CardDescription>Просмотр и управление всеми ежедневными отчётами</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => navigate("/manager-reports")}>View Reports</Button>
+                <Button className="w-full" onClick={() => navigate("/manager-reports")}>Просмотреть отчёты</Button>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Inventory Batches</CardTitle>
-                <CardDescription>Add and manage inventory batches</CardDescription>
+                <CardTitle>Партии инвентаря</CardTitle>
+                <CardDescription>Добавление и управление партиями инвентаря</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => navigate("/inventory-batches")}>Manage Batches</Button>
+                <Button className="w-full" onClick={() => navigate("/inventory-batches")}>Управление партиями</Button>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Current Inventory</CardTitle>
-                <CardDescription>View real-time inventory levels</CardDescription>
+                <CardTitle>Текущий инвентарь</CardTitle>
+                <CardDescription>Просмотр уровней запасов в реальном времени</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full" onClick={() => navigate("/current-inventory")}>View Inventory</Button>
+                <Button className="w-full" onClick={() => navigate("/current-inventory")}>Просмотреть инвентарь</Button>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Bell className="h-5 w-5" />
-                  Notifications
+                  Уведомления
                   {unreadCount > 0 && (
                     <Badge variant="destructive" className="ml-auto">
                       {unreadCount}
                     </Badge>
                   )}
                 </CardTitle>
-                <CardDescription>View batch and report alerts</CardDescription>
+                <CardDescription>Просмотр уведомлений о партиях и отчётах</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button className="w-full" onClick={() => navigate("/notifications")}>
-                  View Notifications
+                  Просмотреть уведомления
                 </Button>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Positions</CardTitle>
-                <CardDescription>Configure inventory positions</CardDescription>
+                <CardTitle>Позиции</CardTitle>
+                <CardDescription>Настройка позиций инвентаря</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button className="w-full" onClick={() => navigate("/positions")}>
-                  Manage Positions
+                  Управление позициями
                 </Button>
               </CardContent>
             </Card>

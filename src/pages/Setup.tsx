@@ -63,7 +63,7 @@ const Setup = () => {
     setLoading(false);
 
     if (successCount === accounts.length) {
-      toast.success("All accounts created successfully!");
+      toast.success("Все аккаунты созданы успешно!");
       setSetupComplete(true);
       
       // Sign out the setup session
@@ -73,7 +73,7 @@ const Setup = () => {
         navigate("/login");
       }, 2000);
     } else {
-      toast.error(`Setup partially completed. ${successCount} accounts created, ${errorCount} errors.`);
+      toast.error(`Настройка частично завершена. Создано аккаунтов: ${successCount}, ошибок: ${errorCount}.`);
     }
   };
 
@@ -81,18 +81,18 @@ const Setup = () => {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Initial Setup</CardTitle>
+          <CardTitle>Начальная настройка</CardTitle>
           <CardDescription>
-            Create the pre-configured user accounts for the barista system
+            Создание предварительно настроенных учётных записей для системы бариста
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2 text-sm">
-            <p className="font-semibold">This will create:</p>
+            <p className="font-semibold">Будут созданы:</p>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-              <li>Barista 1 (Username: 1, Password: 111111)</li>
-              <li>Barista 2 (Username: 2, Password: 222222)</li>
-              <li>Manager (Username: 69, Password: 696969)</li>
+              <li>Бариста 1 (Имя: 1, Пароль: 111111)</li>
+              <li>Бариста 2 (Имя: 2, Пароль: 222222)</li>
+              <li>Менеджер (Имя: 69, Пароль: 696969)</li>
             </ul>
           </div>
           
@@ -102,11 +102,11 @@ const Setup = () => {
               className="w-full" 
               disabled={loading}
             >
-              {loading ? "Creating accounts..." : "Create Accounts"}
+              {loading ? "Создание аккаунтов..." : "Создать аккаунты"}
             </Button>
           ) : (
             <div className="text-center text-sm text-muted-foreground">
-              Setup complete! Redirecting to login...
+              Настройка завершена! Переход на страницу входа...
             </div>
           )}
         </CardContent>

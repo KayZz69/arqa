@@ -26,9 +26,9 @@ const Login = () => {
     });
 
     if (error) {
-      toast.error("Invalid username or password");
+      toast.error("Неверное имя пользователя или пароль");
     } else {
-      toast.success("Logged in successfully");
+      toast.success("Вход выполнен успешно");
       navigate("/");
     }
     setLoading(false);
@@ -38,35 +38,35 @@ const Login = () => {
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Login</CardTitle>
-          <CardDescription>Enter your username and password</CardDescription>
+          <CardTitle>Вход</CardTitle>
+          <CardDescription>Введите ваше имя пользователя и пароль</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Имя пользователя</Label>
               <Input
                 id="username"
                 type="text"
-                placeholder="Enter username"
+                placeholder="Введите имя пользователя"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Пароль</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Enter password"
+                placeholder="Введите пароль"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Logging in..." : "Login"}
+              {loading ? "Вход..." : "Войти"}
             </Button>
           </form>
         </CardContent>
