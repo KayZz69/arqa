@@ -616,7 +616,27 @@ export default function DailyReport() {
         })}
       </div>
 
-      {/* Sticky Submit Button for Baristas */}
+      {/* Desktop Submit Button for Baristas */}
+      {role === "barista" && !isLocked && (
+        <div className="hidden md:flex mt-6 gap-2 justify-end">
+          <Button 
+            variant="destructive"
+            onClick={handleDeleteReport}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Очистить черновик
+          </Button>
+          <Button 
+            onClick={handleSubmitReport}
+            disabled={submitting || filledPositions === 0}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            {submitting ? "Отправка..." : "Отправить отчёт"}
+          </Button>
+        </div>
+      )}
+
+      {/* Sticky Submit Button for Baristas (Mobile) */}
       {role === "barista" && !isLocked && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t p-4 md:hidden">
           <div className="flex gap-2">
