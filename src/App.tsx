@@ -11,6 +11,7 @@ import Positions from "./pages/Positions";
 import DailyReport from "./pages/DailyReport";
 import InventoryBatches from "./pages/InventoryBatches";
 import CurrentInventory from "./pages/CurrentInventory";
+import ManagerReports from "./pages/ManagerReports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <CurrentInventory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/manager-reports"
+            element={
+              <ProtectedRoute>
+                <ManagerReports />
               </ProtectedRoute>
             }
           />
