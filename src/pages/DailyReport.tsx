@@ -11,7 +11,11 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
-import { CalendarIcon, ArrowLeft, Trash2, Send, Lock, Unlock } from "lucide-react";
+import { CalendarIcon, ArrowLeft, Trash2, Send, Lock, Unlock, ChevronDown, ChevronUp } from "lucide-react";
+import { ReportStatusBadge } from "@/components/ReportStatusBadge";
+import { PositionCard } from "@/components/PositionCard";
+import { Progress } from "@/components/ui/progress";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -50,6 +54,7 @@ export default function DailyReport() {
   const [loading, setLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
 
   const fetchReport = useCallback(async (date: Date) => {
     try {
@@ -405,6 +410,23 @@ export default function DailyReport() {
     return acc;
   }, {} as Record<string, Position[]>);
 
+  // Calculate progress
+  const totalPositions = positions.length;
+  const filledPositions = Object.values(reportItems).filter(
+    item => item.ending_stock > 0 || item.write_off > 0
+  ).length;
+  const progressPercentage = totalPositions > 0 ? (filledPositions / totalPositions) * 100 : 0;
+
+  const getReportStatus = () => {
+    if (!reportId) return "draft";
+    if (isLocked) return "submitted";
+    return "draft";
+  };
+
+  const toggleCategory = (category: string) => {
+    setOpenCategories(prev => ({ ...prev, [category]: !prev[category] }));
+  };
+
   if (roleLoading || loading) {
     return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
   }
@@ -418,15 +440,25 @@ export default function DailyReport() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="container mx-auto p-4 md:p-6 pb-24 md:pb-6">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-3xl font-bold">Ежедневный отчёт</h1>
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl md:text-3xl font-bold">Ежедневный отчёт</h1>
+              <ReportStatusBadge status={getReportStatus()} />
+            </div>
+            {totalPositions > 0 && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Заполнено: {filledPositions} из {totalPositions} позиций
+              </p>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2">
           {reportId && role === "manager" && (
             <Button 
               variant={isLocked ? "outline" : "secondary"} 
@@ -435,42 +467,40 @@ export default function DailyReport() {
             >
               {isLocked ? (
                 <>
-                  <Unlock className="h-4 w-4 mr-2" />
-                  Разблокировать
+                  <Unlock className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Разблокировать</span>
                 </>
               ) : (
                 <>
-                  <Lock className="h-4 w-4 mr-2" />
-                  Заблокировать
+                  <Lock className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Заблокировать</span>
                 </>
               )}
             </Button>
           )}
-          {role === "barista" && !isLocked && (
-            <>
-              <Button 
-                variant="default" 
-                size="sm" 
-                onClick={handleSubmitReport}
-                disabled={submitting}
-              >
-                <Send className="h-4 w-4 mr-2" />
-                {submitting ? "Отправка..." : "Отправить отчёт"}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                {reportId ? "Удалить отчёт" : "Очистить черновик"}
-              </Button>
-            </>
-          )}
           {reportId && role === "manager" && (
             <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Удалить отчёт
+              <Trash2 className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">Удалить</span>
             </Button>
           )}
         </div>
       </div>
+
+      {/* Progress Bar */}
+      {totalPositions > 0 && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Прогресс заполнения</span>
+                <span className="font-medium">{Math.round(progressPercentage)}%</span>
+              </div>
+              <Progress value={progressPercentage} className="h-2" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mb-6">
         <CardHeader>
@@ -482,7 +512,7 @@ export default function DailyReport() {
               <Button
                 variant="outline"
                 className={cn(
-                  "w-[240px] justify-start text-left font-normal",
+                  "w-full md:w-[240px] justify-start text-left font-normal",
                   !selectedDate && "text-muted-foreground"
                 )}
                 disabled={isLocked}
@@ -530,59 +560,85 @@ export default function DailyReport() {
         </CardContent>
       </Card>
 
-      <div className="space-y-6">
-        {Object.entries(groupedPositions).map(([category, categoryPositions]) => (
-          <Card key={category}>
-            <CardHeader>
-              <CardTitle>{category}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {categoryPositions.map(position => {
-                  const item = reportItems[position.id] || {
-                    position_id: position.id,
-                    ending_stock: 0,
-                    write_off: 0,
-                  };
+      <div className="space-y-4">
+        {Object.entries(groupedPositions).map(([category, categoryPositions]) => {
+          const categoryFilled = categoryPositions.filter(pos => {
+            const item = reportItems[pos.id];
+            return item && (item.ending_stock > 0 || item.write_off > 0);
+          }).length;
+          const isOpen = openCategories[category] !== false; // default to open
 
-                  return (
-                    <div key={position.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end p-4 border rounded-lg">
-                      <div>
-                        <Label className="font-semibold">{position.name}</Label>
-                        <p className="text-sm text-muted-foreground">{position.unit}</p>
-                      </div>
-                      <div>
-                        <Label htmlFor={`stock-${position.id}`}>Остаток на конец дня</Label>
-                        <Input
-                          id={`stock-${position.id}`}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.ending_stock}
-                          onChange={(e) => handleInputChange(position.id, "ending_stock", e.target.value)}
-                          disabled={isLocked && role !== "manager"}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`writeoff-${position.id}`}>Списание</Label>
-                        <Input
-                          id={`writeoff-${position.id}`}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.write_off}
-                          onChange={(e) => handleInputChange(position.id, "write_off", e.target.value)}
-                          disabled={isLocked && role !== "manager"}
-                        />
-                      </div>
+          return (
+            <Card key={category}>
+              <Collapsible open={isOpen} onOpenChange={() => toggleCategory(category)}>
+                <CardHeader className="cursor-pointer" onClick={() => toggleCategory(category)}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CardTitle>{category}</CardTitle>
+                      <span className="text-sm text-muted-foreground">
+                        {categoryFilled}/{categoryPositions.length}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {categoryPositions.map(position => {
+                        const item = reportItems[position.id] || {
+                          position_id: position.id,
+                          ending_stock: 0,
+                          write_off: 0,
+                        };
+
+                        return (
+                          <PositionCard
+                            key={position.id}
+                            position={position}
+                            endingStock={item.ending_stock}
+                            writeOff={item.write_off}
+                            disabled={isLocked && role !== "manager"}
+                            onChange={(field, value) => handleInputChange(position.id, field, value)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </CollapsibleContent>
+              </Collapsible>
+            </Card>
+          );
+        })}
       </div>
+
+      {/* Sticky Submit Button for Baristas */}
+      {role === "barista" && !isLocked && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t p-4 md:hidden">
+          <div className="flex gap-2">
+            <Button 
+              className="flex-1"
+              size="lg"
+              onClick={handleSubmitReport}
+              disabled={submitting || filledPositions === 0}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {submitting ? "Отправка..." : "Отправить отчёт"}
+            </Button>
+            <Button 
+              variant="destructive" 
+              size="lg"
+              onClick={handleDeleteReport}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
