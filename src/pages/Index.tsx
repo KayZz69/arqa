@@ -103,7 +103,9 @@ const Index = () => {
                 <CardDescription>Configure inventory positions</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full">Manage Positions</Button>
+                <Button className="w-full" onClick={() => navigate("/positions")}>
+                  Manage Positions
+                </Button>
               </CardContent>
             </Card>
           </div>
