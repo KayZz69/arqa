@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
-import { CalendarIcon, Save, ArrowLeft, Trash2, Send } from "lucide-react";
+import { CalendarIcon, Save, ArrowLeft, Trash2, Send, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -55,12 +55,18 @@ export default function DailyReport() {
 
       const dateString = format(date, "yyyy-MM-dd");
 
-      const { data: existingReport } = await supabase
+      // For managers, try to find any report for this date
+      // For baristas, only find their own reports
+      let query = supabase
         .from("daily_reports")
         .select("*")
-        .eq("barista_id", user.id)
-        .eq("report_date", dateString)
-        .maybeSingle();
+        .eq("report_date", dateString);
+
+      if (role !== "manager") {
+        query = query.eq("barista_id", user.id);
+      }
+
+      const { data: existingReport } = await query.maybeSingle();
 
       if (existingReport) {
         setReportId(existingReport.id);
@@ -84,21 +90,48 @@ export default function DailyReport() {
           setReportItems(itemsMap);
         }
       } else {
-        const { data: newReport, error } = await supabase
-          .from("daily_reports")
-          .insert({
-            barista_id: user.id,
-            report_date: dateString,
-            is_locked: false,
-          })
-          .select()
-          .single();
+        // Only baristas can create new reports
+        if (role !== "manager") {
+          const { data: newReport, error } = await supabase
+            .from("daily_reports")
+            .insert({
+              barista_id: user.id,
+              report_date: dateString,
+              is_locked: false,
+            })
+            .select()
+            .single();
 
-        if (error) throw error;
-        
-        setReportId(newReport.id);
-        setIsLocked(false);
-        setReportItems({});
+          if (error) {
+            // Check if it's a duplicate error
+            if (error.code === "23505") {
+              // Report already exists, try to fetch it again
+              const { data: retryReport } = await supabase
+                .from("daily_reports")
+                .select("*")
+                .eq("barista_id", user.id)
+                .eq("report_date", dateString)
+                .maybeSingle();
+              
+              if (retryReport) {
+                setReportId(retryReport.id);
+                setIsLocked(retryReport.is_locked);
+                setReportItems({});
+                return;
+              }
+            }
+            throw error;
+          }
+          
+          setReportId(newReport.id);
+          setIsLocked(false);
+          setReportItems({});
+        } else {
+          // No report exists for this date
+          setReportId(null);
+          setIsLocked(false);
+          setReportItems({});
+        }
       }
     } catch (error) {
       console.error("Error fetching/creating report:", error);
@@ -108,7 +141,7 @@ export default function DailyReport() {
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast, role]);
 
   useEffect(() => {
     const fetchPositions = async () => {
@@ -144,7 +177,8 @@ export default function DailyReport() {
   }, [selectedDate, fetchOrCreateReport]);
 
   const saveReportItem = useCallback(async (positionId: string, data: Omit<ReportItem, "position_id">) => {
-    if (!reportId || isLocked) return;
+    // Managers can edit even locked reports
+    if (!reportId || (isLocked && role !== "manager")) return;
 
     try {
       reportItemSchema.parse(data);
@@ -164,16 +198,19 @@ export default function DailyReport() {
           .eq("id", data.id);
         if (error) throw error;
       } else {
-        const { data: newItem, error } = await supabase
+        // Use upsert to handle duplicates
+        const { data: upsertedItem, error } = await supabase
           .from("report_items")
-          .insert(itemData)
+          .upsert(itemData, {
+            onConflict: "report_id,position_id"
+          })
           .select()
           .single();
 
         if (error) throw error;
         setReportItems(prev => ({
           ...prev,
-          [positionId]: { ...itemData, id: newItem.id },
+          [positionId]: { ...itemData, id: upsertedItem.id },
         }));
       }
     } catch (error) {
@@ -194,7 +231,7 @@ export default function DailyReport() {
     } finally {
       setSaving(false);
     }
-  }, [reportId, isLocked, toast]);
+  }, [reportId, isLocked, role, toast]);
 
   const handleInputChange = (positionId: string, field: "ending_stock" | "write_off", value: string) => {
     const numValue = parseFloat(value) || 0;
@@ -264,7 +301,8 @@ export default function DailyReport() {
   };
 
   const handleDeleteReport = async () => {
-    if (!reportId || isLocked) return;
+    // Managers can only delete unlocked reports, baristas can only delete their own unlocked reports
+    if (!reportId || (isLocked && role !== "manager")) return;
     
     if (!confirm("Вы уверены, что хотите удалить этот отчёт? Это удалит все элементы в отчёте.")) {
       return;
@@ -297,6 +335,34 @@ export default function DailyReport() {
     }
   };
 
+  const handleToggleLock = async () => {
+    if (!reportId || role !== "manager") return;
+
+    try {
+      const newLockStatus = !isLocked;
+      const { error } = await supabase
+        .from("daily_reports")
+        .update({ is_locked: newLockStatus })
+        .eq("id", reportId);
+
+      if (error) throw error;
+
+      setIsLocked(newLockStatus);
+      
+      toast({
+        title: "Успешно",
+        description: newLockStatus ? "Отчёт заблокирован" : "Отчёт разблокирован",
+      });
+    } catch (error) {
+      console.error("Error toggling lock:", error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось изменить статус блокировки",
+        variant: "destructive",
+      });
+    }
+  };
+
   const groupedPositions = positions.reduce((acc, position) => {
     if (!acc[position.category]) {
       acc[position.category] = [];
@@ -309,10 +375,10 @@ export default function DailyReport() {
     return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
   }
 
-  if (role !== "barista") {
+  if (role !== "barista" && role !== "manager") {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Доступ запрещён. Только для бариста.</p>
+        <p>Доступ запрещён.</p>
       </div>
     );
   }
@@ -333,7 +399,26 @@ export default function DailyReport() {
               Сохранение...
             </div>
           )}
-          {reportId && !isLocked && (
+          {reportId && role === "manager" && (
+            <Button 
+              variant={isLocked ? "outline" : "secondary"} 
+              size="sm" 
+              onClick={handleToggleLock}
+            >
+              {isLocked ? (
+                <>
+                  <Unlock className="h-4 w-4 mr-2" />
+                  Разблокировать
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4 mr-2" />
+                  Заблокировать
+                </>
+              )}
+            </Button>
+          )}
+          {reportId && !isLocked && role === "barista" && (
             <>
               <Button 
                 variant="default" 
@@ -383,9 +468,14 @@ export default function DailyReport() {
               />
             </PopoverContent>
           </Popover>
-          {isLocked && (
+          {isLocked && role === "barista" && (
             <p className="mt-2 text-sm text-destructive">
               Этот отчёт заблокирован и не может быть изменён или удалён.
+            </p>
+          )}
+          {isLocked && role === "manager" && (
+            <p className="mt-2 text-sm text-warning">
+              Этот отчёт заблокирован. Вы можете разблокировать его для редактирования.
             </p>
           )}
           {!isLocked && reportId && (
@@ -426,7 +516,7 @@ export default function DailyReport() {
                           step="0.01"
                           value={item.ending_stock}
                           onChange={(e) => handleInputChange(position.id, "ending_stock", e.target.value)}
-                          disabled={isLocked}
+                          disabled={isLocked && role !== "manager"}
                         />
                       </div>
                       <div>
@@ -438,7 +528,7 @@ export default function DailyReport() {
                           step="0.01"
                           value={item.write_off}
                           onChange={(e) => handleInputChange(position.id, "write_off", e.target.value)}
-                          disabled={isLocked}
+                          disabled={isLocked && role !== "manager"}
                         />
                       </div>
                     </div>
