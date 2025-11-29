@@ -1,24 +1,73 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ArrowLeft, Coffee, UserCog } from "lucide-react";
+
+type Step = 'role' | 'user' | 'password';
+type Role = 'barista' | 'manager';
+
+interface UserOption {
+  user_id: string;
+  display_name: string;
+  username: string;
+}
 
 const Login = () => {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const [step, setStep] = useState<Step>('role');
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserOption | null>(null);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // Load users when role is selected
+  useEffect(() => {
+    if (selectedRole) {
+      const fetchUsers = async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select(`
+            user_id,
+            display_name,
+            username,
+            user_roles!inner(role)
+          `)
+          .eq('user_roles.role', selectedRole);
+
+        if (error) {
+          console.error("Error fetching users:", error);
+          toast.error("Ошибка загрузки пользователей");
+        } else {
+          setUsers(data || []);
+        }
+        setLoading(false);
+      };
+      fetchUsers();
+    }
+  }, [selectedRole]);
+
+  const handleRoleSelect = (role: Role) => {
+    setSelectedRole(role);
+    setStep('user');
+  };
+
+  const handleUserSelect = (user: UserOption) => {
+    setSelectedUser(user);
+    setStep('password');
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!selectedUser) return;
 
-    // Convert username to email format for Supabase
-    const email = `${username}@barista.local`;
+    setLoading(true);
+    const email = `${selectedUser.username}@barista.local`;
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -26,49 +75,119 @@ const Login = () => {
     });
 
     if (error) {
-      toast.error("Неверное имя пользователя или пароль");
+      toast.error("Неверный пароль");
     } else {
-      toast.success("Вход выполнен успешно");
+      toast.success(`Добро пожаловать, ${selectedUser.display_name}!`);
       navigate("/");
     }
     setLoading(false);
+  };
+
+  const handleBack = () => {
+    if (step === 'password') {
+      setStep('user');
+      setSelectedUser(null);
+      setPassword("");
+    } else if (step === 'user') {
+      setStep('role');
+      setSelectedRole(null);
+      setUsers([]);
+    }
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Вход</CardTitle>
-          <CardDescription>Введите ваше имя пользователя и пароль</CardDescription>
+          <div className="flex items-center gap-2">
+            {step !== 'role' && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleBack}
+                className="h-8 w-8"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <CardTitle>
+              {step === 'role' && '☕ Добро пожаловать'}
+              {step === 'user' && 'Выберите аккаунт'}
+              {step === 'password' && `Вход: ${selectedUser?.display_name}`}
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Имя пользователя</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Введите имя пользователя"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
+          {step === 'role' && (
+            <div className="space-y-3">
+              <Button
+                variant="outline"
+                className="w-full h-16 text-lg justify-start gap-3"
+                onClick={() => handleRoleSelect('barista')}
+              >
+                <Coffee className="h-6 w-6" />
+                <span>Бариста</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-16 text-lg justify-start gap-3"
+                onClick={() => handleRoleSelect('manager')}
+              >
+                <UserCog className="h-6 w-6" />
+                <span>Управляющий</span>
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Пароль</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Введите пароль"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+          )}
+
+          {step === 'user' && (
+            <div className="space-y-3">
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Загрузка...
+                </div>
+              ) : users.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Пользователи не найдены
+                </div>
+              ) : (
+                users.map((user) => (
+                  <Button
+                    key={user.user_id}
+                    variant="outline"
+                    className="w-full h-14 text-base justify-start gap-3"
+                    onClick={() => handleUserSelect(user)}
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                      <span className="text-sm font-medium">
+                        {user.display_name[0]}
+                      </span>
+                    </div>
+                    <span>{user.display_name}</span>
+                  </Button>
+                ))
+              )}
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Вход..." : "Войти"}
-            </Button>
-          </form>
+          )}
+
+          {step === 'password' && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Введите пароль"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoFocus
+                  className="h-12"
+                />
+              </div>
+              <Button type="submit" className="w-full h-12" disabled={loading}>
+                {loading ? "Вход..." : "Войти"}
+              </Button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>
