@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Setup from "./pages/Setup";
 import Positions from "./pages/Positions";
+import DailyReport from "./pages/DailyReport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <Positions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/daily-report"
+            element={
+              <ProtectedRoute>
+                <DailyReport />
               </ProtectedRoute>
             }
           />

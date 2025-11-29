@@ -60,7 +60,7 @@ const Index = () => {
                 <CardDescription>Create and view your daily inventory reports</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full">Create New Report</Button>
+                <Button className="w-full" onClick={() => navigate("/daily-report")}>Create New Report</Button>
               </CardContent>
             </Card>
             <Card>
