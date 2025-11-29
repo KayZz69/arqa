@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { CalendarIcon, Save, ArrowLeft } from "lucide-react";
+import { CalendarIcon, Save, ArrowLeft, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -225,6 +225,45 @@ export default function DailyReport() {
     });
   };
 
+  // Delete report
+  const handleDeleteReport = async () => {
+    if (!reportId || isLocked) return;
+    
+    if (!confirm("Are you sure you want to delete this report? This will delete all items in the report.")) {
+      return;
+    }
+
+    try {
+      // Delete report (cascade will delete report_items)
+      const { error } = await supabase
+        .from("daily_reports")
+        .delete()
+        .eq("id", reportId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Report deleted successfully",
+      });
+
+      // Reset state
+      setReportId(null);
+      setReportItems({});
+      setIsLocked(false);
+      
+      // Redirect to home
+      navigate("/");
+    } catch (error) {
+      console.error("Error deleting report:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete report",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Group positions by category
   const groupedPositions = positions.reduce((acc, position) => {
     if (!acc[position.category]) {
@@ -255,12 +294,20 @@ export default function DailyReport() {
           </Button>
           <h1 className="text-3xl font-bold">Daily Report</h1>
         </div>
-        {saving && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Save className="h-4 w-4 animate-pulse" />
-            Saving...
-          </div>
-        )}
+        <div className="flex items-center gap-4">
+          {saving && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Save className="h-4 w-4 animate-pulse" />
+              Saving...
+            </div>
+          )}
+          {reportId && !isLocked && (
+            <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Report
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="mb-6">
@@ -293,8 +340,13 @@ export default function DailyReport() {
             </PopoverContent>
           </Popover>
           {isLocked && (
+            <p className="mt-2 text-sm text-destructive">
+              This report is locked and cannot be edited or deleted.
+            </p>
+          )}
+          {!isLocked && reportId && (
             <p className="mt-2 text-sm text-muted-foreground">
-              This report is locked and cannot be edited.
+              This report is editable. Changes are auto-saved.
             </p>
           )}
         </CardContent>

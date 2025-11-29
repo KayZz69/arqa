@@ -85,7 +85,7 @@ const Index = () => {
                 <CardDescription>View and manage all daily reports</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button className="w-full">View Reports</Button>
+                <Button className="w-full" onClick={() => navigate("/manager-reports")}>View Reports</Button>
               </CardContent>
             </Card>
             <Card>
