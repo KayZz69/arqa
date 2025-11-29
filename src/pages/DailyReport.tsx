@@ -254,7 +254,7 @@ export default function DailyReport() {
           .insert({
             barista_id: user.id,
             report_date: dateString,
-            is_locked: true,
+            is_locked: false, // Create unlocked initially
           })
           .select()
           .single();
@@ -262,14 +262,6 @@ export default function DailyReport() {
         if (createError) throw createError;
         currentReportId = newReport.id;
         setReportId(currentReportId);
-      } else {
-        // Update existing report to locked
-        const { error: updateError } = await supabase
-          .from("daily_reports")
-          .update({ is_locked: true })
-          .eq("id", currentReportId);
-
-        if (updateError) throw updateError;
       }
 
       // Save all report items
@@ -287,6 +279,14 @@ export default function DailyReport() {
         });
 
       if (itemsError) throw itemsError;
+
+      // Now lock the report
+      const { error: lockError } = await supabase
+        .from("daily_reports")
+        .update({ is_locked: true })
+        .eq("id", currentReportId);
+
+      if (lockError) throw lockError;
 
       // Send notifications to managers
       const { data: managers } = await supabase
