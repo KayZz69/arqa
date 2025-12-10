@@ -44,6 +44,7 @@ export type Database = {
       inventory_batches: {
         Row: {
           arrival_date: string
+          cost_per_unit: number | null
           created_at: string
           created_by: string
           expiry_date: string | null
@@ -53,6 +54,7 @@ export type Database = {
         }
         Insert: {
           arrival_date: string
+          cost_per_unit?: number | null
           created_at?: string
           created_by: string
           expiry_date?: string | null
@@ -62,6 +64,7 @@ export type Database = {
         }
         Update: {
           arrival_date?: string
+          cost_per_unit?: number | null
           created_at?: string
           created_by?: string
           expiry_date?: string | null
@@ -116,6 +119,7 @@ export type Database = {
           category: string
           created_at: string
           id: string
+          last_cost: number | null
           min_stock: number
           name: string
           order_quantity: number
@@ -130,6 +134,7 @@ export type Database = {
           category: string
           created_at?: string
           id?: string
+          last_cost?: number | null
           min_stock?: number
           name: string
           order_quantity?: number
@@ -144,6 +149,7 @@ export type Database = {
           category?: string
           created_at?: string
           id?: string
+          last_cost?: number | null
           min_stock?: number
           name?: string
           order_quantity?: number

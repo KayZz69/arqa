@@ -32,6 +32,7 @@ import { toast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { ArrowLeft, Plus, Trash2, X, ShoppingCart, Package, History } from "lucide-react";
 import { format, addDays } from "date-fns";
+import { ExcelImport } from "@/components/ExcelImport";
 
 interface Position {
   id: string;
@@ -41,12 +42,14 @@ interface Position {
   shelf_life_days: number | null;
   min_stock: number;
   order_quantity: number;
+  last_cost: number;
 }
 
 interface InventoryBatch {
   id: string;
   position_id: string;
   quantity: number;
+  cost_per_unit: number;
   arrival_date: string;
   expiry_date: string | null;
   created_at: string;
@@ -56,6 +59,7 @@ interface InventoryBatch {
 interface BatchItem {
   positionId: string;
   quantity: string;
+  costPerUnit: string;
 }
 
 interface OrderItem {
@@ -75,7 +79,7 @@ export default function Warehouse() {
 
   // Form state
   const [arrivalDate, setArrivalDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
-  const [batchItems, setBatchItems] = useState<BatchItem[]>([{ positionId: "", quantity: "" }]);
+  const [batchItems, setBatchItems] = useState<BatchItem[]>([{ positionId: "", quantity: "", costPerUnit: "" }]);
 
   useEffect(() => {
     if (!roleLoading && role !== "manager") {
@@ -101,7 +105,7 @@ export default function Warehouse() {
       // Fetch batches with position details
       const { data: batchesData, error: batchesError } = await supabase
         .from("inventory_batches")
-        .select(`*, positions (id, name, category, unit, shelf_life_days, min_stock, order_quantity)`)
+        .select(`*, positions (id, name, category, unit, shelf_life_days, min_stock, order_quantity, last_cost)`)
         .order("arrival_date", { ascending: false });
 
       if (batchesError) throw batchesError;
@@ -144,7 +148,7 @@ export default function Warehouse() {
     setOrderItems(items);
   };
 
-  const addBatchItem = () => setBatchItems([...batchItems, { positionId: "", quantity: "" }]);
+  const addBatchItem = () => setBatchItems([...batchItems, { positionId: "", quantity: "", costPerUnit: "" }]);
   const removeBatchItem = (index: number) => {
     if (batchItems.length === 1) return;
     setBatchItems(batchItems.filter((_, i) => i !== index));
@@ -178,6 +182,7 @@ export default function Warehouse() {
         return {
           position_id: item.positionId,
           quantity: parseFloat(item.quantity),
+          cost_per_unit: item.costPerUnit ? parseFloat(item.costPerUnit) : 0,
           arrival_date: arrivalDate,
           expiry_date: calculateExpiryDate(arrivalDate, position?.shelf_life_days || null),
           created_by: user.id,
@@ -187,9 +192,19 @@ export default function Warehouse() {
       const { error } = await supabase.from("inventory_batches").insert(batchRecords);
       if (error) throw error;
 
+      // Update last_cost for each position
+      for (const item of validItems) {
+        if (item.costPerUnit && parseFloat(item.costPerUnit) > 0) {
+          await supabase
+            .from("positions")
+            .update({ last_cost: parseFloat(item.costPerUnit) })
+            .eq("id", item.positionId);
+        }
+      }
+
       toast({ title: "Успешно", description: `Добавлено ${validItems.length} позиций` });
       setArrivalDate(format(new Date(), "yyyy-MM-dd"));
-      setBatchItems([{ positionId: "", quantity: "" }]);
+      setBatchItems([{ positionId: "", quantity: "", costPerUnit: "" }]);
       fetchData();
     } catch (error) {
       console.error("Error adding batch:", error);
@@ -310,6 +325,7 @@ export default function Warehouse() {
                           <TableHead className="text-right">Остаток</TableHead>
                           <TableHead className="text-right">Минимум</TableHead>
                           <TableHead className="text-right">Заказать</TableHead>
+                          <TableHead className="text-right">~Сумма</TableHead>
                           <TableHead className="text-right">Действие</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -328,6 +344,12 @@ export default function Warehouse() {
                             </TableCell>
                             <TableCell className="text-right font-medium">
                               {item.suggestedQuantity} {item.position.unit}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {item.position.last_cost > 0 
+                                ? `~${(item.suggestedQuantity * item.position.last_cost).toLocaleString()}₸`
+                                : "—"
+                              }
                             </TableCell>
                             <TableCell className="text-right">
                               <Button size="sm" onClick={() => handleMarkAsOrdered(item)}>
@@ -396,12 +418,24 @@ export default function Warehouse() {
                           onChange={(e) => updateBatchItem(index, "quantity", e.target.value)}
                           placeholder="Количество"
                         />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={item.costPerUnit}
+                          onChange={(e) => updateBatchItem(index, "costPerUnit", e.target.value)}
+                          placeholder="Себестоимость за единицу (₸)"
+                        />
                       </div>
                     ))}
                     <Button type="button" variant="outline" size="sm" onClick={addBatchItem} className="w-full">
                       <Plus className="h-4 w-4 mr-2" />
                       Добавить ещё позицию
                     </Button>
+                  </div>
+
+                  <div className="pt-2 border-t">
+                    <ExcelImport positions={positions} onImportComplete={fetchData} />
                   </div>
 
                   <Button type="submit" className="w-full" disabled={submitting}>
@@ -428,7 +462,9 @@ export default function Warehouse() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Позиция</TableHead>
-                        <TableHead className="text-right">Количество</TableHead>
+                        <TableHead className="text-right">Кол-во</TableHead>
+                        <TableHead className="text-right">Себест.</TableHead>
+                        <TableHead className="text-right">Сумма</TableHead>
                         <TableHead>Прибытие</TableHead>
                         <TableHead>Истекает</TableHead>
                         <TableHead className="text-right">Действия</TableHead>
@@ -437,13 +473,14 @@ export default function Warehouse() {
                     <TableBody>
                       {batches.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground">
+                          <TableCell colSpan={7} className="text-center text-muted-foreground">
                             Нет партий
                           </TableCell>
                         </TableRow>
                       ) : (
                         batches.map((batch) => {
                           const status = getExpiryStatus(batch);
+                          const totalCost = batch.quantity * (batch.cost_per_unit || 0);
                           return (
                             <TableRow key={batch.id}>
                               <TableCell>
@@ -452,6 +489,12 @@ export default function Warehouse() {
                               </TableCell>
                               <TableCell className="text-right">
                                 {batch.quantity} {batch.positions.unit}
+                              </TableCell>
+                              <TableCell className="text-right text-muted-foreground">
+                                {batch.cost_per_unit > 0 ? `${batch.cost_per_unit.toLocaleString()}₸` : "—"}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {totalCost > 0 ? `${totalCost.toLocaleString()}₸` : "—"}
                               </TableCell>
                               <TableCell>{format(new Date(batch.arrival_date), "dd.MM.yyyy")}</TableCell>
                               <TableCell>
