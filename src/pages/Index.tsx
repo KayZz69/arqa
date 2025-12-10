@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useDisplayName } from "@/hooks/useDisplayName";
 import { toast } from "sonner";
-import { ClipboardList, Package, Settings, Calendar, TrendingUp, Warehouse, FileText, ShoppingCart, AlertTriangle } from "lucide-react";
+import { ClipboardList, Package, Settings, Calendar, TrendingUp, Warehouse, FileText, ShoppingCart } from "lucide-react";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { format } from "date-fns";
@@ -71,7 +71,6 @@ const Index = () => {
 
   const fetchManagerMetrics = async () => {
     try {
-      // Get positions needing order
       const { data: positions } = await supabase
         .from("positions")
         .select("id, min_stock")
@@ -92,7 +91,6 @@ const Index = () => {
       }
       setOrderCount(needsOrder);
 
-      // Get today's reports stats
       const today = format(new Date(), "yyyy-MM-dd");
       const { data: todayReports } = await supabase
         .from("daily_reports")
@@ -125,38 +123,50 @@ const Index = () => {
     return "draft";
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Доброе утро";
+    if (hour < 18) return "Добрый день";
+    return "Добрый вечер";
+  };
+
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-muted-foreground">Загрузка...</span>
+        </div>
+      </div>
+    );
   }
 
   return (
     <>
-      <div className="min-h-screen bg-background pb-20 md:pb-8">
+      <div className="min-h-screen bg-background pb-24 md:pb-8">
         <div className="mx-auto max-w-4xl p-4 md:p-8">
-          <div className="mb-6 flex items-center justify-between">
+          {/* Header */}
+          <div className="mb-8 flex items-start justify-between animate-fade-in">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold">
-                {role === "barista" ? "☕ " : ""}Управление инвентарём
+              <p className="text-muted-foreground text-sm mb-1">
+                {format(new Date(), "EEEE, d MMMM", { locale: ru })}
+              </p>
+              <h1 className="text-2xl md:text-3xl font-bold mb-1">
+                {getGreeting()}{displayName ? `, ${displayName.split(' ')[0]}` : ''}! 👋
               </h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                {format(new Date(), "EEEE, d MMMM yyyy", { locale: ru })}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {displayName || user?.email}
-              </p>
               {role && (
-                <Badge variant="secondary" className="mt-2">
-                  {role === "barista" ? "Бариста" : "Менеджер"}
+                <Badge variant="secondary" className="mt-2 rounded-full px-3">
+                  {role === "barista" ? "☕ Бариста" : "📊 Менеджер"}
                 </Badge>
               )}
             </div>
-            <Button onClick={handleLogout} variant="outline" size="sm" className="hidden md:flex">
+            <Button onClick={handleLogout} variant="outline" size="sm" className="hidden md:flex rounded-xl">
               Выход
             </Button>
           </div>
 
           {!role && (
-            <Card>
+            <Card className="animate-fade-in">
               <CardHeader>
                 <CardTitle>Роль не назначена</CardTitle>
                 <CardDescription>
@@ -168,68 +178,99 @@ const Index = () => {
 
           {role === "barista" && (
             <div className="space-y-6">
-              <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <ClipboardList className="h-5 w-5" />
-                      Сегодняшний отчёт
-                    </CardTitle>
+              {/* Today's Report Card - Hero */}
+              <Card className="overflow-hidden border-0 shadow-lg animate-slide-up opacity-0 stagger-1">
+                <div className="gradient-primary p-6 text-primary-foreground">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
+                        <ClipboardList className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg">Сегодняшний отчёт</h3>
+                        <p className="text-primary-foreground/80 text-sm">
+                          {todayReport
+                            ? todayReport.is_locked
+                              ? `Отправлен в ${format(new Date(todayReport.submitted_at), "HH:mm")}`
+                              : "Черновик сохранён"
+                            : "Отчёт ещё не создан"}
+                        </p>
+                      </div>
+                    </div>
                     <ReportStatusBadge status={getReportStatus()} />
                   </div>
-                  <CardDescription>
-                    {todayReport
-                      ? todayReport.is_locked
-                        ? `Отправлен в ${format(new Date(todayReport.submitted_at), "HH:mm")}`
-                        : "Черновик сохранён"
-                      : "Отчёт ещё не создан"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
                   {!todayReport || !todayReport.is_locked ? (
-                    <Button className="w-full" size="lg" onClick={() => navigate("/daily-report")}>
+                    <Button 
+                      className="w-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0 h-12 rounded-xl font-medium" 
+                      size="lg" 
+                      onClick={() => navigate("/daily-report")}
+                    >
                       {todayReport ? "Продолжить заполнение" : "Создать отчёт"}
                     </Button>
                   ) : (
-                    <Button className="w-full" variant="outline" onClick={() => navigate("/daily-report")}>
+                    <Button 
+                      className="w-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0 h-12 rounded-xl font-medium" 
+                      variant="outline" 
+                      onClick={() => navigate("/daily-report")}
+                    >
                       Просмотреть отчёт
                     </Button>
                   )}
-                </CardContent>
+                </div>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Прогресс за неделю
-                  </CardTitle>
-                  <CardDescription>
-                    Отправлено {weeklyStats.submitted} из {weeklyStats.total} отчётов
-                  </CardDescription>
+              {/* Weekly Progress */}
+              <Card className="border-2 animate-slide-up opacity-0 stagger-2">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-chart-2/20 flex items-center justify-center">
+                      <TrendingUp className="h-5 w-5 text-chart-2" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">Прогресс за неделю</CardTitle>
+                      <CardDescription>
+                        {weeklyStats.submitted} из {weeklyStats.total} отчётов
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <Progress value={(weeklyStats.submitted / weeklyStats.total) * 100} className="h-3" />
+                  <Progress value={(weeklyStats.submitted / weeklyStats.total) * 100} className="h-3 rounded-full" />
                 </CardContent>
               </Card>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => navigate("/current-inventory")}>
+              {/* Navigation Cards */}
+              <div className="grid gap-4 md:grid-cols-2 animate-slide-up opacity-0 stagger-3">
+                <Card 
+                  className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
+                  onClick={() => navigate("/current-inventory")}
+                >
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Package className="h-5 w-5" />
-                      Инвентарь
-                    </CardTitle>
-                    <CardDescription>Просмотр текущих остатков</CardDescription>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                        <Package className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Инвентарь</CardTitle>
+                        <CardDescription>Текущие остатки</CardDescription>
+                      </div>
+                    </div>
                   </CardHeader>
                 </Card>
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => navigate("/report-history")}>
+                <Card 
+                  className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
+                  onClick={() => navigate("/report-history")}
+                >
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Calendar className="h-5 w-5" />
-                      История отчётов
-                    </CardTitle>
-                    <CardDescription>Предыдущие отчёты</CardDescription>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-chart-3/20 flex items-center justify-center group-hover:bg-chart-3/30 transition-colors">
+                        <Calendar className="h-5 w-5 text-chart-3" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">История отчётов</CardTitle>
+                        <CardDescription>Все ваши отчёты</CardDescription>
+                      </div>
+                    </div>
                   </CardHeader>
                 </Card>
               </div>
@@ -239,29 +280,29 @@ const Index = () => {
           {role === "manager" && (
             <div className="space-y-6">
               {/* Metrics Summary */}
-              <div className="grid grid-cols-2 gap-4">
-                <Card className={orderCount > 0 ? "border-destructive/50 bg-destructive/5" : ""}>
+              <div className="grid grid-cols-2 gap-4 animate-slide-up opacity-0 stagger-1">
+                <Card className={`border-2 ${orderCount > 0 ? "border-destructive/50 bg-destructive/5" : ""}`}>
                   <CardContent className="pt-6">
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${orderCount > 0 ? "bg-destructive/10" : "bg-muted"}`}>
-                        <ShoppingCart className={`h-5 w-5 ${orderCount > 0 ? "text-destructive" : "text-muted-foreground"}`} />
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${orderCount > 0 ? "bg-destructive/10" : "bg-muted"}`}>
+                        <ShoppingCart className={`h-6 w-6 ${orderCount > 0 ? "text-destructive" : "text-muted-foreground"}`} />
                       </div>
                       <div>
-                        <p className={`text-2xl font-bold ${orderCount > 0 ? "text-destructive" : ""}`}>{orderCount}</p>
+                        <p className={`text-3xl font-bold ${orderCount > 0 ? "text-destructive" : ""}`}>{orderCount}</p>
                         <p className="text-xs text-muted-foreground">Нужно заказать</p>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="border-2">
                   <CardContent className="pt-6">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-muted">
-                        <ClipboardList className="h-5 w-5 text-muted-foreground" />
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                        <ClipboardList className="h-6 w-6 text-primary" />
                       </div>
                       <div>
-                        <p className="text-2xl font-bold">{todayReportsCount.submitted}/{todayReportsCount.total}</p>
+                        <p className="text-3xl font-bold">{todayReportsCount.submitted}/{todayReportsCount.total}</p>
                         <p className="text-xs text-muted-foreground">Отчётов сегодня</p>
                       </div>
                     </div>
@@ -270,46 +311,69 @@ const Index = () => {
               </div>
 
               {/* Navigation Cards */}
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => navigate("/warehouse")}>
+              <div className="grid gap-4 md:grid-cols-3 animate-slide-up opacity-0 stagger-2">
+                <Card 
+                  className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
+                  onClick={() => navigate("/warehouse")}
+                >
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Warehouse className="h-5 w-5" />
-                      Склад
-                      {orderCount > 0 && <Badge variant="destructive">{orderCount}</Badge>}
-                    </CardTitle>
-                    <CardDescription>Заказы, приход и история</CardDescription>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                        <Warehouse className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-base">Склад</CardTitle>
+                          {orderCount > 0 && <Badge variant="destructive" className="rounded-full text-xs">{orderCount}</Badge>}
+                        </div>
+                        <CardDescription>Заказы и приход</CardDescription>
+                      </div>
+                    </div>
                   </CardHeader>
                 </Card>
 
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => navigate("/manager-reports")}>
+                <Card 
+                  className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
+                  onClick={() => navigate("/manager-reports")}
+                >
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Отчёты
-                    </CardTitle>
-                    <CardDescription>История отчётов бариста</CardDescription>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-chart-2/20 flex items-center justify-center group-hover:bg-chart-2/30 transition-colors">
+                        <FileText className="h-5 w-5 text-chart-2" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Отчёты</CardTitle>
+                        <CardDescription>История бариста</CardDescription>
+                      </div>
+                    </div>
                   </CardHeader>
                 </Card>
 
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => navigate("/positions")}>
+                <Card 
+                  className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
+                  onClick={() => navigate("/positions")}
+                >
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Settings className="h-5 w-5" />
-                      Настройки
-                    </CardTitle>
-                    <CardDescription>Управление позициями</CardDescription>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-secondary/20 flex items-center justify-center group-hover:bg-secondary/30 transition-colors">
+                        <Settings className="h-5 w-5 text-secondary-foreground" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">Настройки</CardTitle>
+                        <CardDescription>Позиции</CardDescription>
+                      </div>
+                    </div>
                   </CardHeader>
                 </Card>
               </div>
 
               {/* Quick Links */}
-              <Card>
-                <CardHeader>
+              <Card className="border-2 animate-slide-up opacity-0 stagger-3">
+                <CardHeader className="pb-3">
                   <CardTitle className="text-base">Быстрый доступ</CardTitle>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={() => navigate("/current-inventory")}>
+                  <Button variant="outline" size="sm" className="rounded-xl" onClick={() => navigate("/current-inventory")}>
                     <Package className="h-4 w-4 mr-2" />
                     Текущий инвентарь
                   </Button>
