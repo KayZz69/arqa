@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,8 +28,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2 } from "lucide-react";
+import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, Plus } from "lucide-react";
 import { format, addDays } from "date-fns";
+
+const CATEGORIES = ["Выпечка", "Кухня", "Ингредиент", "Расходник", "Пицца"] as const;
+const UNITS = ["кг", "л", "шт", "г", "мл", "уп"] as const;
 
 interface Position {
   id: string;
@@ -55,13 +58,30 @@ interface ExcelImportProps {
   onImportComplete: () => void;
 }
 
-export function ExcelImport({ positions, onImportComplete }: ExcelImportProps) {
+export function ExcelImport({ positions: initialPositions, onImportComplete }: ExcelImportProps) {
+  const [positions, setPositions] = useState<Position[]>(initialPositions);
   const [isOpen, setIsOpen] = useState(false);
   const [parsedItems, setParsedItems] = useState<ParsedItem[]>([]);
   const [documentInfo, setDocumentInfo] = useState({ title: "", vendor: "", date: "" });
   const [arrivalDate, setArrivalDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // State for create position dialog
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createItemIndex, setCreateItemIndex] = useState<number | null>(null);
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    unit: "шт" as string,
+    category: "" as string,
+    shelf_life_days: null as number | null,
+  });
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Sync positions when prop changes
+  useEffect(() => {
+    setPositions(initialPositions);
+  }, [initialPositions]);
 
   const normalizeString = (str: string): string => {
     return str.toLowerCase().trim().replace(/\s+/g, " ");
@@ -200,6 +220,81 @@ export function ExcelImport({ positions, onImportComplete }: ExcelImportProps) {
       matchStatus: position ? "exact" : "not_found",
     };
     setParsedItems(updated);
+  };
+
+  const handleSelectChange = (index: number, value: string) => {
+    if (value === "__create__") {
+      const item = parsedItems[index];
+      setCreateItemIndex(index);
+      setCreateForm({
+        name: item.originalName,
+        unit: UNITS.includes(item.unit as typeof UNITS[number]) ? item.unit : "шт",
+        category: "",
+        shelf_life_days: null,
+      });
+      setCreateDialogOpen(true);
+    } else {
+      updateItemPosition(index, value);
+    }
+  };
+
+  const handleCreatePosition = async () => {
+    if (!createForm.category) {
+      toast({ title: "Ошибка", description: "Выберите категорию", variant: "destructive" });
+      return;
+    }
+    if (createItemIndex === null) return;
+
+    setIsCreating(true);
+    try {
+      const item = parsedItems[createItemIndex];
+      
+      const { data, error } = await supabase
+        .from("positions")
+        .insert({
+          name: createForm.name,
+          category: createForm.category,
+          unit: createForm.unit,
+          shelf_life_days: createForm.shelf_life_days,
+          min_stock: 5,
+          order_quantity: 10,
+          active: true,
+          last_cost: item.costPerUnit,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newPosition: Position = {
+        id: data.id,
+        name: data.name,
+        category: data.category,
+        unit: data.unit,
+        shelf_life_days: data.shelf_life_days,
+      };
+
+      // Update local positions list
+      setPositions(prev => [...prev, newPosition]);
+
+      // Link the new position to the parsed item
+      const updated = [...parsedItems];
+      updated[createItemIndex] = {
+        ...updated[createItemIndex],
+        matchedPosition: newPosition,
+        matchStatus: "exact",
+      };
+      setParsedItems(updated);
+
+      toast({ title: "Позиция создана", description: `"${newPosition.name}" добавлена в систему` });
+      setCreateDialogOpen(false);
+      setCreateItemIndex(null);
+    } catch (error) {
+      console.error("Create position error:", error);
+      toast({ title: "Ошибка", description: "Не удалось создать позицию", variant: "destructive" });
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const calculateExpiryDate = (arrivalDate: string, shelfLifeDays: number | null): string | null => {
@@ -352,12 +447,12 @@ export function ExcelImport({ positions, onImportComplete }: ExcelImportProps) {
                       <TableCell>
                         <Select
                           value={item.matchedPosition?.id || "__skip__"}
-                          onValueChange={(value) => updateItemPosition(index, value)}
+                          onValueChange={(value) => handleSelectChange(index, value)}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Выберите позицию" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="bg-background z-50">
                             <SelectItem value="__skip__">— Пропустить —</SelectItem>
                             {/* Show matched/similar first */}
                             {item.matchedPosition && (
@@ -370,6 +465,13 @@ export function ExcelImport({ positions, onImportComplete }: ExcelImportProps) {
                                 ~ {p.name}
                               </SelectItem>
                             ))}
+                            {/* Create new option */}
+                            <SelectItem value="__create__" className="text-primary font-medium">
+                              <span className="flex items-center gap-1">
+                                <Plus className="h-3 w-3" />
+                                Создать "{item.originalName}"
+                              </span>
+                            </SelectItem>
                             {/* Then all others */}
                             {positions
                               .filter(p => 
@@ -402,6 +504,93 @@ export function ExcelImport({ positions, onImportComplete }: ExcelImportProps) {
                 </>
               ) : (
                 `Импортировать ${matchedCount} позиций`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Position Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Создать позицию</DialogTitle>
+            <DialogDescription>
+              Новая позиция будет добавлена в систему и привязана к этой строке импорта
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="create-name">Название</Label>
+              <Input
+                id="create-name"
+                value={createForm.name}
+                onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="create-category">Категория *</Label>
+              <Select
+                value={createForm.category}
+                onValueChange={(value) => setCreateForm({ ...createForm, category: value })}
+              >
+                <SelectTrigger id="create-category">
+                  <SelectValue placeholder="Выберите категорию" />
+                </SelectTrigger>
+                <SelectContent className="bg-background z-50">
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="create-unit">Единица измерения</Label>
+              <Select
+                value={createForm.unit}
+                onValueChange={(value) => setCreateForm({ ...createForm, unit: value })}
+              >
+                <SelectTrigger id="create-unit">
+                  <SelectValue placeholder="Выберите единицу" />
+                </SelectTrigger>
+                <SelectContent className="bg-background z-50">
+                  {UNITS.map((unit) => (
+                    <SelectItem key={unit} value={unit}>
+                      {unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="create-shelf-life">Срок годности (дни)</Label>
+              <Input
+                id="create-shelf-life"
+                type="number"
+                min="0"
+                value={createForm.shelf_life_days ?? ""}
+                onChange={(e) => setCreateForm({ 
+                  ...createForm, 
+                  shelf_life_days: e.target.value ? parseInt(e.target.value) : null 
+                })}
+                placeholder="Необязательно"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleCreatePosition} disabled={!createForm.category || isCreating}>
+              {isCreating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Создание...
+                </>
+              ) : (
+                "Создать"
               )}
             </Button>
           </DialogFooter>
