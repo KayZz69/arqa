@@ -29,6 +29,7 @@ interface Position {
   unit: string;
   min_stock: number;
   order_quantity: number;
+  last_cost: number;
 }
 
 interface InventoryLevel {
@@ -154,6 +155,7 @@ export default function CurrentInventory() {
                       <TableRow>
                         <TableHead>Позиция</TableHead>
                         <TableHead className="text-right">Остаток</TableHead>
+                        <TableHead className="text-right">Стоимость</TableHead>
                         <TableHead className="text-right">Статус</TableHead>
                         {role === "manager" && <TableHead className="text-right">Действие</TableHead>}
                       </TableRow>
@@ -161,11 +163,15 @@ export default function CurrentInventory() {
                     <TableBody>
                       {items.map((item) => {
                         const status = getStatus(item.currentStock, item.position.min_stock);
+                        const stockValue = item.currentStock * (item.position.last_cost || 0);
                         return (
                           <TableRow key={item.position.id}>
                             <TableCell className="font-medium">{item.position.name}</TableCell>
                             <TableCell className="text-right">
                               {item.currentStock} {item.position.unit}
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                              {stockValue > 0 ? `${stockValue.toLocaleString()}₸` : "—"}
                             </TableCell>
                             <TableCell className="text-right">
                               <Badge variant={getStatusVariant(status)}>
