@@ -112,10 +112,13 @@ export type Database = {
       positions: {
         Row: {
           active: boolean
+          avg_daily_usage: number
           category: string
           created_at: string
           id: string
+          min_stock: number
           name: string
+          order_quantity: number
           shelf_life_days: number | null
           sort_order: number
           unit: string
@@ -123,10 +126,13 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          avg_daily_usage?: number
           category: string
           created_at?: string
           id?: string
+          min_stock?: number
           name: string
+          order_quantity?: number
           shelf_life_days?: number | null
           sort_order?: number
           unit: string
@@ -134,10 +140,13 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          avg_daily_usage?: number
           category?: string
           created_at?: string
           id?: string
+          min_stock?: number
           name?: string
+          order_quantity?: number
           shelf_life_days?: number | null
           sort_order?: number
           unit?: string

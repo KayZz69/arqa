@@ -23,6 +23,8 @@ const positionSchema = z.object({
   unit: z.enum(UNITS, { required_error: "Unit is required" }),
   shelf_life_days: z.number().int().min(0).nullable(),
   active: z.boolean(),
+  min_stock: z.number().min(0),
+  order_quantity: z.number().min(0),
 });
 
 type Position = {
@@ -32,6 +34,8 @@ type Position = {
   unit: string;
   shelf_life_days: number | null;
   active: boolean;
+  min_stock: number;
+  order_quantity: number;
   created_at: string;
   updated_at: string;
 };
@@ -51,6 +55,8 @@ const Positions = () => {
     unit: "",
     shelf_life_days: null,
     active: true,
+    min_stock: 5,
+    order_quantity: 10,
   });
 
   useEffect(() => {
@@ -91,6 +97,8 @@ const Positions = () => {
         unit: position.unit,
         shelf_life_days: position.shelf_life_days,
         active: position.active,
+        min_stock: position.min_stock,
+        order_quantity: position.order_quantity,
       });
     } else {
       setEditingPosition(null);
@@ -100,6 +108,8 @@ const Positions = () => {
         unit: "",
         shelf_life_days: null,
         active: true,
+        min_stock: 5,
+        order_quantity: 10,
       });
     }
     setDialogOpen(true);
@@ -114,6 +124,8 @@ const Positions = () => {
       unit: "",
       shelf_life_days: null,
       active: true,
+      min_stock: 5,
+      order_quantity: 10,
     });
   };
 
@@ -132,6 +144,8 @@ const Positions = () => {
             unit: validatedData.unit,
             shelf_life_days: validatedData.shelf_life_days,
             active: validatedData.active,
+            min_stock: validatedData.min_stock,
+            order_quantity: validatedData.order_quantity,
           })
           .eq("id", editingPosition.id);
 
@@ -146,6 +160,8 @@ const Positions = () => {
             unit: validatedData.unit,
             shelf_life_days: validatedData.shelf_life_days,
             active: validatedData.active,
+            min_stock: validatedData.min_stock,
+            order_quantity: validatedData.order_quantity,
           }]);
 
         if (error) throw error;
@@ -269,6 +285,34 @@ const Positions = () => {
                       placeholder="Необязательно"
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="min_stock">Мин. остаток</Label>
+                      <Input
+                        id="min_stock"
+                        type="number"
+                        min="0"
+                        value={formData.min_stock}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          min_stock: parseFloat(e.target.value) || 0 
+                        })}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="order_quantity">Кол-во заказа</Label>
+                      <Input
+                        id="order_quantity"
+                        type="number"
+                        min="0"
+                        value={formData.order_quantity}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          order_quantity: parseFloat(e.target.value) || 0 
+                        })}
+                      />
+                    </div>
+                  </div>
                   <div className="flex items-center justify-between">
                     <Label htmlFor="active">Активна</Label>
                     <Switch
@@ -303,7 +347,8 @@ const Positions = () => {
                   <TableRow>
                     <TableHead>Название</TableHead>
                     <TableHead>Единица</TableHead>
-                    <TableHead>Срок годности</TableHead>
+                    <TableHead>Мин. остаток</TableHead>
+                    <TableHead>Заказ</TableHead>
                     <TableHead>Статус</TableHead>
                     <TableHead className="text-right">Действия</TableHead>
                   </TableRow>
@@ -313,9 +358,8 @@ const Positions = () => {
                     <TableRow key={position.id}>
                       <TableCell className="font-medium">{position.name}</TableCell>
                       <TableCell>{position.unit}</TableCell>
-                      <TableCell>
-                        {position.shelf_life_days ? `${position.shelf_life_days} дней` : "—"}
-                      </TableCell>
+                      <TableCell>{position.min_stock}</TableCell>
+                      <TableCell>{position.order_quantity}</TableCell>
                       <TableCell>
                         <span className={position.active ? "text-green-600" : "text-muted-foreground"}>
                           {position.active ? "Активна" : "Неактивна"}

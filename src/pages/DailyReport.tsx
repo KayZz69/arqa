@@ -5,11 +5,9 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { ru } from "date-fns/locale";
 import { CalendarIcon, ArrowLeft, Trash2, Send, Lock, Unlock, ChevronDown, ChevronUp } from "lucide-react";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
@@ -21,7 +19,6 @@ import { z } from "zod";
 
 const reportItemSchema = z.object({
   ending_stock: z.coerce.number().min(0, "Должно быть 0 или больше"),
-  write_off: z.coerce.number().min(0, "Должно быть 0 или больше"),
 });
 
 type Position = {
@@ -29,6 +26,7 @@ type Position = {
   name: string;
   category: string;
   unit: string;
+  min_stock: number;
 };
 
 type ReportItem = {
@@ -36,6 +34,11 @@ type ReportItem = {
   position_id: string;
   ending_stock: number;
   write_off: number;
+};
+
+type PreviousDayData = {
+  ending_stock: number;
+  arrivals: number;
 };
 
 export default function DailyReport() {
@@ -51,10 +54,63 @@ export default function DailyReport() {
   const [reportId, setReportId] = useState<string | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [reportItems, setReportItems] = useState<Record<string, ReportItem>>({});
+  const [previousDayData, setPreviousDayData] = useState<Record<string, PreviousDayData>>({});
   const [loading, setLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+
+  // Fetch previous day stock for all positions
+  const fetchPreviousDayData = useCallback(async (date: Date, positionIds: string[]) => {
+    const previousDate = subDays(date, 1);
+    const previousDateString = format(previousDate, "yyyy-MM-dd");
+    const currentDateString = format(date, "yyyy-MM-dd");
+
+    const data: Record<string, PreviousDayData> = {};
+
+    // Get previous day report
+    const { data: prevReport } = await supabase
+      .from("daily_reports")
+      .select("id")
+      .eq("report_date", previousDateString)
+      .maybeSingle();
+
+    let prevItems: Record<string, number> = {};
+    if (prevReport) {
+      const { data: items } = await supabase
+        .from("report_items")
+        .select("position_id, ending_stock")
+        .eq("report_id", prevReport.id);
+      
+      if (items) {
+        items.forEach(item => {
+          prevItems[item.position_id] = Number(item.ending_stock);
+        });
+      }
+    }
+
+    // Get arrivals for current date
+    const { data: batches } = await supabase
+      .from("inventory_batches")
+      .select("position_id, quantity")
+      .eq("arrival_date", currentDateString);
+
+    const arrivals: Record<string, number> = {};
+    if (batches) {
+      batches.forEach(batch => {
+        arrivals[batch.position_id] = (arrivals[batch.position_id] || 0) + Number(batch.quantity);
+      });
+    }
+
+    positionIds.forEach(id => {
+      data[id] = {
+        ending_stock: prevItems[id] || 0,
+        arrivals: arrivals[id] || 0,
+      };
+    });
+
+    setPreviousDayData(data);
+  }, []);
 
   const fetchReport = useCallback(async (date: Date) => {
     try {
@@ -63,8 +119,6 @@ export default function DailyReport() {
 
       const dateString = format(date, "yyyy-MM-dd");
 
-      // For managers, try to find any report for this date
-      // For baristas, only find their own reports
       let query = supabase
         .from("daily_reports")
         .select("*")
@@ -91,14 +145,13 @@ export default function DailyReport() {
             itemsMap[item.position_id] = {
               id: item.id,
               position_id: item.position_id,
-              ending_stock: item.ending_stock,
-              write_off: item.write_off,
+              ending_stock: Number(item.ending_stock),
+              write_off: Number(item.write_off),
             };
           });
           setReportItems(itemsMap);
         }
       } else {
-        // No report exists yet
         setReportId(null);
         setIsLocked(false);
         setReportItems({});
@@ -118,13 +171,18 @@ export default function DailyReport() {
       try {
         const { data, error } = await supabase
           .from("positions")
-          .select("id, name, category, unit")
+          .select("id, name, category, unit, min_stock")
           .eq("active", true)
           .order("category")
           .order("sort_order");
 
         if (error) throw error;
         setPositions(data || []);
+        
+        // Fetch previous day data for all positions
+        if (data && data.length > 0) {
+          fetchPreviousDayData(selectedDate, data.map(p => p.id));
+        }
       } catch (error) {
         console.error("Error fetching positions:", error);
         toast({
@@ -138,82 +196,68 @@ export default function DailyReport() {
     };
 
     fetchPositions();
-  }, [toast]);
+  }, [toast, fetchPreviousDayData, selectedDate]);
 
   useEffect(() => {
     if (selectedDate) {
       fetchReport(selectedDate);
+      if (positions.length > 0) {
+        fetchPreviousDayData(selectedDate, positions.map(p => p.id));
+      }
     }
-  }, [selectedDate, fetchReport]);
+  }, [selectedDate, fetchReport, fetchPreviousDayData, positions]);
 
-  const saveReportItem = useCallback(async (positionId: string, data: Omit<ReportItem, "position_id">) => {
-    // Only managers can edit locked reports
+  const calculateWriteOff = (positionId: string, endingStock: number): number => {
+    const prev = previousDayData[positionId] || { ending_stock: 0, arrivals: 0 };
+    // Write-off = Previous stock + Arrivals - Current stock
+    return Math.max(0, prev.ending_stock + prev.arrivals - endingStock);
+  };
+
+  const saveReportItem = useCallback(async (positionId: string, endingStock: number, writeOff: number) => {
     if (!reportId || (isLocked && role !== "manager")) return;
 
     try {
-      reportItemSchema.parse(data);
-
       const itemData = {
         report_id: reportId,
         position_id: positionId,
-        ending_stock: data.ending_stock,
-        write_off: data.write_off,
+        ending_stock: endingStock,
+        write_off: writeOff,
       };
 
-      if (data.id) {
-        const { error } = await supabase
-          .from("report_items")
-          .update(itemData)
-          .eq("id", data.id);
-        if (error) throw error;
-      } else {
-        const { data: upsertedItem, error } = await supabase
-          .from("report_items")
-          .upsert(itemData, {
-            onConflict: "report_id,position_id"
-          })
-          .select()
-          .single();
+      const { data: upsertedItem, error } = await supabase
+        .from("report_items")
+        .upsert(itemData, { onConflict: "report_id,position_id" })
+        .select()
+        .single();
 
-        if (error) throw error;
-        setReportItems(prev => ({
-          ...prev,
-          [positionId]: { ...itemData, id: upsertedItem.id },
-        }));
-      }
+      if (error) throw error;
+      
+      setReportItems(prev => ({
+        ...prev,
+        [positionId]: { ...itemData, id: upsertedItem.id },
+      }));
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({
-          title: "Ошибка валидации",
-          description: error.errors[0].message,
-          variant: "destructive",
-        });
-      } else {
-        console.error("Error saving report item:", error);
-        toast({
-          title: "Ошибка",
-          description: "Не удалось сохранить элемент",
-          variant: "destructive",
-        });
-      }
+      console.error("Error saving report item:", error);
+      toast({
+        title: "Ошибка",
+        description: "Не удалось сохранить элемент",
+        variant: "destructive",
+      });
     }
   }, [reportId, isLocked, role, toast]);
 
-  const handleInputChange = (positionId: string, field: "ending_stock" | "write_off", value: string) => {
+  const handleInputChange = (positionId: string, value: string) => {
     const numValue = parseFloat(value) || 0;
-    
-    console.log('handleInputChange:', { positionId, field, value, numValue });
+    const calculatedWriteOff = calculateWriteOff(positionId, numValue);
     
     setReportItems(prev => {
       const current = prev[positionId] || { position_id: positionId, ending_stock: 0, write_off: 0 };
-      const updated = { ...current, [field]: numValue };
-      
-      console.log('Updated reportItems:', { positionId, updated, allItems: { ...prev, [positionId]: updated } });
+      const updated = { ...current, ending_stock: numValue, write_off: calculatedWriteOff };
       
       // For managers editing locked reports, save immediately
       if (reportId && isLocked && role === "manager") {
         setTimeout(() => {
-          saveReportItem(positionId, updated);
+          saveReportItem(positionId, numValue, calculatedWriteOff);
         }, 1000);
       }
       
@@ -221,10 +265,67 @@ export default function DailyReport() {
     });
   };
 
+  const checkLowStockAndNotify = async (items: ReportItem[]) => {
+    const { data: managers } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "manager");
+
+    if (!managers || managers.length === 0) return;
+
+    const lowStockPositions = items.filter(item => {
+      const position = positions.find(p => p.id === item.position_id);
+      return position && item.ending_stock < position.min_stock;
+    });
+
+    for (const item of lowStockPositions) {
+      const position = positions.find(p => p.id === item.position_id);
+      if (!position) continue;
+
+      const notifications = managers.map(manager => ({
+        user_id: manager.user_id,
+        type: "low_stock",
+        message: `⚠️ ${position.name}: осталось ${item.ending_stock} ${position.unit}, рекомендуем заказать`,
+        related_id: item.position_id,
+      }));
+
+      await supabase.from("notifications").insert(notifications);
+    }
+  };
+
+  const checkHighWriteOffAndNotify = async (items: ReportItem[]) => {
+    const { data: managers } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "manager");
+
+    if (!managers || managers.length === 0) return;
+
+    for (const item of items) {
+      const prev = previousDayData[item.position_id];
+      if (!prev) continue;
+
+      const expectedUsage = prev.ending_stock + prev.arrivals;
+      // Alert if write-off is more than 50% of available stock
+      if (item.write_off > expectedUsage * 0.5 && item.write_off > 2) {
+        const position = positions.find(p => p.id === item.position_id);
+        if (!position) continue;
+
+        const notifications = managers.map(manager => ({
+          user_id: manager.user_id,
+          type: "high_writeoff",
+          message: `🚨 ${position.name}: списано ${item.write_off} ${position.unit} (было ${prev.ending_stock}+${prev.arrivals})`,
+          related_id: item.position_id,
+        }));
+
+        await supabase.from("notifications").insert(notifications);
+      }
+    }
+  };
+
   const handleSubmitReport = async () => {
     if (isLocked && role !== "manager") return;
     
-    // Check if there are any items to submit
     const hasItems = Object.keys(reportItems).length > 0;
     if (!hasItems) {
       toast({
@@ -235,7 +336,7 @@ export default function DailyReport() {
       return;
     }
 
-    if (!confirm("Вы уверены, что хотите отправить этот отчёт? После отправки его нельзя будет редактировать.")) {
+    if (!confirm("Вы уверены, что хотите отправить этот отчёт?")) {
       return;
     }
 
@@ -246,7 +347,6 @@ export default function DailyReport() {
 
       const dateString = format(selectedDate, "yyyy-MM-dd");
 
-      // Create the report if it doesn't exist
       let currentReportId = reportId;
       if (!currentReportId) {
         const { data: newReport, error: createError } = await supabase
@@ -254,7 +354,7 @@ export default function DailyReport() {
           .insert({
             barista_id: user.id,
             report_date: dateString,
-            is_locked: false, // Create unlocked initially
+            is_locked: false,
           })
           .select()
           .single();
@@ -264,23 +364,24 @@ export default function DailyReport() {
         setReportId(currentReportId);
       }
 
-      // Save all report items
-      const itemsToInsert = Object.values(reportItems).map(item => ({
-        report_id: currentReportId,
-        position_id: item.position_id,
-        ending_stock: item.ending_stock,
-        write_off: item.write_off,
-      }));
+      // Calculate write-offs for all items
+      const itemsToInsert = Object.values(reportItems).map(item => {
+        const writeOff = calculateWriteOff(item.position_id, item.ending_stock);
+        return {
+          report_id: currentReportId,
+          position_id: item.position_id,
+          ending_stock: item.ending_stock,
+          write_off: writeOff,
+        };
+      });
 
       const { error: itemsError } = await supabase
         .from("report_items")
-        .upsert(itemsToInsert, {
-          onConflict: "report_id,position_id"
-        });
+        .upsert(itemsToInsert, { onConflict: "report_id,position_id" });
 
       if (itemsError) throw itemsError;
 
-      // Now lock the report
+      // Lock the report
       const { error: lockError } = await supabase
         .from("daily_reports")
         .update({ is_locked: true })
@@ -288,7 +389,11 @@ export default function DailyReport() {
 
       if (lockError) throw lockError;
 
-      // Send notifications to managers
+      // Check for low stock and high write-offs
+      await checkLowStockAndNotify(itemsToInsert);
+      await checkHighWriteOffAndNotify(itemsToInsert);
+
+      // Send notification to managers about report
       const { data: managers } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -298,7 +403,7 @@ export default function DailyReport() {
         const notifications = managers.map(manager => ({
           user_id: manager.user_id,
           type: "report_submitted",
-          message: `Новый ежедневный отчёт отправлен пользователем ${user?.email} за ${format(selectedDate, "dd MMM yyyy", { locale: ru })}`,
+          message: `Новый ежедневный отчёт от ${user?.email} за ${format(selectedDate, "dd MMM yyyy", { locale: ru })}`,
           related_id: currentReportId,
         }));
 
@@ -324,7 +429,6 @@ export default function DailyReport() {
   };
 
   const handleDeleteReport = async () => {
-    // Managers can delete any report, baristas can only delete draft reports
     if (!reportId && role === "barista" && Object.keys(reportItems).length === 0) {
       toast({
         title: "Информация",
@@ -334,10 +438,9 @@ export default function DailyReport() {
     }
 
     if (reportId) {
-      // Delete submitted report (only managers can do this)
       if (role !== "manager" && isLocked) return;
       
-      if (!confirm("Вы уверены, что хотите удалить этот отчёт? Это удалит все элементы в отчёте.")) {
+      if (!confirm("Вы уверены, что хотите удалить этот отчёт?")) {
         return;
       }
 
@@ -366,8 +469,7 @@ export default function DailyReport() {
         });
       }
     } else {
-      // Clear draft data
-      if (!confirm("Вы уверены, что хотите очистить черновик?")) {
+      if (!confirm("Очистить черновик?")) {
         return;
       }
       setReportItems({});
@@ -414,10 +516,9 @@ export default function DailyReport() {
     return acc;
   }, {} as Record<string, Position[]>);
 
-  // Calculate progress
   const totalPositions = positions.length;
   const filledPositions = Object.values(reportItems).filter(
-    item => item.ending_stock > 0 || item.write_off > 0
+    item => item.ending_stock > 0
   ).length;
   const progressPercentage = totalPositions > 0 ? (filledPositions / totalPositions) * 100 : 0;
 
@@ -491,7 +592,6 @@ export default function DailyReport() {
         </div>
       </div>
 
-      {/* Progress Bar */}
       {totalPositions > 0 && (
         <Card className="mb-6">
           <CardContent className="pt-6">
@@ -538,27 +638,17 @@ export default function DailyReport() {
           </Popover>
           {isLocked && role === "barista" && (
             <p className="mt-2 text-sm text-destructive">
-              Этот отчёт заблокирован и не может быть изменён или удалён.
+              Этот отчёт заблокирован и не может быть изменён.
             </p>
           )}
           {isLocked && role === "manager" && (
-            <p className="mt-2 text-sm text-warning">
-              Этот отчёт заблокирован. Вы можете разблокировать его для редактирования.
+            <p className="mt-2 text-sm text-muted-foreground">
+              Изменения сохраняются автоматически.
             </p>
           )}
           {!reportId && role === "barista" && (
             <p className="mt-2 text-sm text-muted-foreground">
-              Заполните данные и нажмите "Отправить отчёт" для сохранения.
-            </p>
-          )}
-          {reportId && isLocked && role === "barista" && (
-            <p className="mt-2 text-sm text-destructive">
-              Этот отчёт заблокирован и не может быть изменён.
-            </p>
-          )}
-          {reportId && isLocked && role === "manager" && (
-            <p className="mt-2 text-sm text-warning">
-              Этот отчёт заблокирован. Изменения сохраняются автоматически.
+              Заполните остатки и нажмите "Отправить отчёт".
             </p>
           )}
         </CardContent>
@@ -568,9 +658,9 @@ export default function DailyReport() {
         {Object.entries(groupedPositions).map(([category, categoryPositions]) => {
           const categoryFilled = categoryPositions.filter(pos => {
             const item = reportItems[pos.id];
-            return item && (item.ending_stock > 0 || item.write_off > 0);
+            return item && item.ending_stock > 0;
           }).length;
-          const isOpen = openCategories[category] !== false; // default to open
+          const isOpen = openCategories[category] !== false;
 
           return (
             <Card key={category}>
@@ -599,15 +689,19 @@ export default function DailyReport() {
                           ending_stock: 0,
                           write_off: 0,
                         };
+                        const prev = previousDayData[position.id] || { ending_stock: 0, arrivals: 0 };
+                        const calculatedWriteOff = calculateWriteOff(position.id, item.ending_stock);
 
                         return (
                           <PositionCard
                             key={position.id}
                             position={position}
                             endingStock={item.ending_stock}
-                            writeOff={item.write_off}
+                            previousStock={prev.ending_stock}
+                            arrivals={prev.arrivals}
+                            calculatedWriteOff={calculatedWriteOff}
                             disabled={isLocked && role !== "manager"}
-                            onChange={(field, value) => handleInputChange(position.id, field, value)}
+                            onChange={(value) => handleInputChange(position.id, value)}
                           />
                         );
                       })}
@@ -625,7 +719,7 @@ export default function DailyReport() {
         <div className="hidden md:block mt-6">
           {filledPositions === 0 && (
             <p className="text-sm text-muted-foreground text-right mb-2">
-              Заполните хотя бы одну позицию, чтобы отправить отчёт
+              Заполните хотя бы одну позицию
             </p>
           )}
           <div className="flex gap-2 justify-end">
