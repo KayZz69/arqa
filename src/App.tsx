@@ -13,6 +13,7 @@ import InventoryBatches from "./pages/InventoryBatches";
 import CurrentInventory from "./pages/CurrentInventory";
 import ManagerReports from "./pages/ManagerReports";
 import Notifications from "./pages/Notifications";
+import Orders from "./pages/Orders";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -79,6 +80,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <Notifications />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute>
+                <Orders />
               </ProtectedRoute>
             }
           />

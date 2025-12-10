@@ -28,6 +28,8 @@ interface Position {
   category: string;
   unit: string;
   shelf_life_days: number | null;
+  min_stock: number;
+  order_quantity: number;
 }
 
 interface BatchInfo {
@@ -135,9 +137,9 @@ export default function CurrentInventory() {
     }
   };
 
-  const getInventoryStatus = (level: number): "low" | "medium" | "good" => {
+  const getInventoryStatus = (level: number, minStock: number): "low" | "medium" | "good" => {
     if (level <= 0) return "low";
-    if (level < 10) return "medium";
+    if (level < minStock) return "medium";
     return "good";
   };
 
@@ -244,7 +246,8 @@ export default function CurrentInventory() {
                     <TableBody>
                       {items.map((item) => {
                         const status = getInventoryStatus(
-                          item.calculatedInventory
+                          item.calculatedInventory,
+                          item.position.min_stock
                         );
                         const { hasExpired, hasExpiring } = getBatchExpiryStatus(item.batches);
                         

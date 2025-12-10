@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useDisplayName } from "@/hooks/useDisplayName";
 import { toast } from "sonner";
-import { Bell, ClipboardList, Package, Settings, Calendar, TrendingUp } from "lucide-react";
+import { Bell, ClipboardList, Package, Settings, Calendar, TrendingUp, ShoppingCart } from "lucide-react";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { format } from "date-fns";
@@ -292,6 +292,20 @@ const Index = () => {
                 <CardContent>
                   <Button className="w-full" onClick={() => navigate("/notifications")}>
                     Просмотреть уведомления
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card className="hover:border-primary/50 transition-colors">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5" />
+                    Заказы
+                  </CardTitle>
+                  <CardDescription>Позиции с низким остатком</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button className="w-full" onClick={() => navigate("/orders")}>
+                    Просмотреть заказы
                   </Button>
                 </CardContent>
               </Card>
