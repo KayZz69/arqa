@@ -1,13 +1,22 @@
-import { Home, ClipboardList, Package, User } from "lucide-react";
+import { Home, ClipboardList, Package, LogOut } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export function BottomNavigation() {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success("Вы вышли из системы");
+    navigate("/login");
+  };
+
   const navItems = [
     { to: "/", icon: Home, label: "Главная" },
     { to: "/daily-report", icon: ClipboardList, label: "Отчёт" },
     { to: "/current-inventory", icon: Package, label: "Инвентарь" },
-    { to: "/profile", icon: User, label: "Профиль" },
   ];
 
   return (
@@ -25,6 +34,13 @@ export function BottomNavigation() {
             <span className="text-xs">{item.label}</span>
           </NavLink>
         ))}
+        <button
+          onClick={handleLogout}
+          className="flex flex-col items-center justify-center flex-1 h-full gap-1 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <LogOut className="h-5 w-5" />
+          <span className="text-xs">Выход</span>
+        </button>
       </div>
     </nav>
   );
