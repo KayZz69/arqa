@@ -223,7 +223,7 @@ const Index = () => {
                     <CardDescription>Просмотр текущих остатков</CardDescription>
                   </CardHeader>
                 </Card>
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => navigate("/daily-report")}>
+                <Card className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => navigate("/report-history")}>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Calendar className="h-5 w-5" />

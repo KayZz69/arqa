@@ -12,6 +12,7 @@ import DailyReport from "./pages/DailyReport";
 import Warehouse from "./pages/Warehouse";
 import CurrentInventory from "./pages/CurrentInventory";
 import ManagerReports from "./pages/ManagerReports";
+import ReportHistory from "./pages/ReportHistory";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -70,6 +71,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <ManagerReports />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/report-history"
+            element={
+              <ProtectedRoute>
+                <ReportHistory />
               </ProtectedRoute>
             }
           />
