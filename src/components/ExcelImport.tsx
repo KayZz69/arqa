@@ -192,7 +192,7 @@ export function ExcelImport({ positions, onImportComplete }: ExcelImportProps) {
   };
 
   const updateItemPosition = (index: number, positionId: string) => {
-    const position = positions.find(p => p.id === positionId) || null;
+    const position = positionId === "__skip__" ? null : positions.find(p => p.id === positionId) || null;
     const updated = [...parsedItems];
     updated[index] = {
       ...updated[index],
@@ -351,14 +351,14 @@ export function ExcelImport({ positions, onImportComplete }: ExcelImportProps) {
                       <TableCell className="text-right font-medium">{item.totalAmount.toLocaleString()}₸</TableCell>
                       <TableCell>
                         <Select
-                          value={item.matchedPosition?.id || ""}
+                          value={item.matchedPosition?.id || "__skip__"}
                           onValueChange={(value) => updateItemPosition(index, value)}
                         >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Выберите позицию" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">— Пропустить —</SelectItem>
+                            <SelectItem value="__skip__">— Пропустить —</SelectItem>
                             {/* Show matched/similar first */}
                             {item.matchedPosition && (
                               <SelectItem value={item.matchedPosition.id}>
