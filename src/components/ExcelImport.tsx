@@ -31,8 +31,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Upload, FileSpreadsheet, Check, AlertTriangle, X, Loader2, Plus } from "lucide-react";
 import { format, addDays } from "date-fns";
 
-const CATEGORIES = ["Выпечка", "Кухня", "Ингредиент", "Расходник", "Пицца"] as const;
 const UNITS = ["кг", "л", "шт", "г", "мл", "уп"] as const;
+
+interface Category {
+  id: string;
+  name: string;
+  sort_order: number;
+  active: boolean;
+}
 
 interface Position {
   id: string;
@@ -60,6 +66,7 @@ interface ExcelImportProps {
 
 export function ExcelImport({ positions: initialPositions, onImportComplete }: ExcelImportProps) {
   const [positions, setPositions] = useState<Position[]>(initialPositions);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [parsedItems, setParsedItems] = useState<ParsedItem[]>([]);
   const [documentInfo, setDocumentInfo] = useState({ title: "", vendor: "", date: "" });
@@ -82,6 +89,19 @@ export function ExcelImport({ positions: initialPositions, onImportComplete }: E
   useEffect(() => {
     setPositions(initialPositions);
   }, [initialPositions]);
+
+  // Load categories from database
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const { data } = await supabase
+        .from("categories")
+        .select("*")
+        .eq("active", true)
+        .order("sort_order");
+      if (data) setCategories(data);
+    };
+    fetchCategories();
+  }, []);
 
   const normalizeString = (str: string): string => {
     return str.toLowerCase().trim().replace(/\s+/g, " ");
@@ -538,9 +558,9 @@ export function ExcelImport({ positions: initialPositions, onImportComplete }: E
                   <SelectValue placeholder="Выберите категорию" />
                 </SelectTrigger>
                 <SelectContent className="bg-background z-50">
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.name}>
+                      {cat.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
