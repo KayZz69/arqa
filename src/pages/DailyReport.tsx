@@ -508,7 +508,19 @@ export default function DailyReport() {
     }
   };
 
-  const groupedPositions = positions.reduce((acc, position) => {
+  // Filter positions for baristas - hide positions without stock
+  const visiblePositions = role === "manager" 
+    ? positions 
+    : positions.filter(position => {
+        const prev = previousDayData[position.id];
+        if (!prev) return true; // Show while loading
+        // Show if there's previous stock OR arrivals today
+        return prev.ending_stock > 0 || prev.arrivals > 0;
+      });
+
+  const hiddenPositionsCount = positions.length - visiblePositions.length;
+
+  const groupedPositions = visiblePositions.reduce((acc, position) => {
     if (!acc[position.category]) {
       acc[position.category] = [];
     }
@@ -516,9 +528,9 @@ export default function DailyReport() {
     return acc;
   }, {} as Record<string, Position[]>);
 
-  const totalPositions = positions.length;
+  const totalPositions = visiblePositions.length;
   const filledPositions = Object.values(reportItems).filter(
-    item => item.ending_stock > 0
+    item => item.ending_stock > 0 && visiblePositions.some(p => p.id === item.position_id)
   ).length;
   const progressPercentage = totalPositions > 0 ? (filledPositions / totalPositions) * 100 : 0;
 
@@ -559,6 +571,11 @@ export default function DailyReport() {
             {totalPositions > 0 && (
               <p className="text-sm text-muted-foreground mt-1">
                 Заполнено: {filledPositions} из {totalPositions} позиций
+                {hiddenPositionsCount > 0 && role === "barista" && (
+                  <span className="ml-2 opacity-70">
+                    ({hiddenPositionsCount} без остатков скрыто)
+                  </span>
+                )}
               </p>
             )}
           </div>
