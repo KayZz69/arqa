@@ -1,5 +1,7 @@
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { CheckCircle2, Plus, Minus, Calculator } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +28,70 @@ export function PositionCard({
   disabled,
   onChange,
 }: PositionCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [inputValue, setInputValue] = useState(endingStock.toString());
+  const inputRef = useRef<HTMLInputElement>(null);
+  
   const isFilled = endingStock > 0;
   const hasAnomaly = calculatedWriteOff < 0 || calculatedWriteOff > (previousStock + arrivals) * 0.5;
+
+  // Sync inputValue with endingStock when it changes externally
+  useEffect(() => {
+    if (!isEditing) {
+      setInputValue(endingStock.toString());
+    }
+  }, [endingStock, isEditing]);
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  const handleNumberClick = () => {
+    if (disabled) return;
+    setIsEditing(true);
+  };
+
+  const handleInputBlur = () => {
+    setIsEditing(false);
+    const numValue = parseFloat(inputValue) || 0;
+    onChange(Math.max(0, numValue).toString());
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleInputBlur();
+    }
+    if (e.key === "Escape") {
+      setInputValue(endingStock.toString());
+      setIsEditing(false);
+    }
+  };
+
+  const handleIncrement = () => {
+    if (disabled) return;
+    // Haptic feedback
+    if (navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+    onChange((endingStock + 1).toString());
+  };
+
+  const handleDecrement = () => {
+    if (disabled || endingStock <= 0) return;
+    // Haptic feedback
+    if (navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+    onChange(Math.max(0, endingStock - 1).toString());
+  };
 
   return (
     <div
@@ -60,23 +124,45 @@ export function PositionCard({
           <Button
             type="button"
             variant="outline"
-            size="icon"
-            onClick={() => onChange(Math.max(0, endingStock - 1).toString())}
+            className="h-11 w-11 min-w-[44px] min-h-[44px] p-0"
+            onClick={handleDecrement}
             disabled={disabled || endingStock <= 0}
           >
-            <Minus className="h-4 w-4" />
+            <Minus className="h-5 w-5" />
           </Button>
-          <div className="flex-1 text-center py-2 px-4 border rounded-md bg-background font-semibold">
-            {endingStock}
-          </div>
+          
+          {isEditing ? (
+            <Input
+              ref={inputRef}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={inputValue}
+              onChange={handleInputChange}
+              onBlur={handleInputBlur}
+              onKeyDown={handleInputKeyDown}
+              className="flex-1 text-center py-2 px-4 font-semibold h-11 min-h-[44px]"
+            />
+          ) : (
+            <div 
+              className={cn(
+                "flex-1 text-center py-2 px-4 border rounded-md bg-background font-semibold h-11 min-h-[44px] flex items-center justify-center cursor-pointer transition-colors",
+                !disabled && "hover:bg-accent hover:border-primary active:scale-95"
+              )}
+              onClick={handleNumberClick}
+            >
+              {endingStock}
+            </div>
+          )}
+          
           <Button
             type="button"
             variant="outline"
-            size="icon"
-            onClick={() => onChange((endingStock + 1).toString())}
+            className="h-11 w-11 min-w-[44px] min-h-[44px] p-0"
+            onClick={handleIncrement}
             disabled={disabled}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-5 w-5" />
           </Button>
         </div>
       </div>
@@ -88,7 +174,7 @@ export function PositionCard({
           Списание (авто)
         </Label>
         <div className={cn(
-          "mt-2 py-2 px-4 border rounded-md text-center font-semibold",
+          "mt-2 py-2 px-4 border rounded-md text-center font-semibold h-11 min-h-[44px] flex items-center justify-center",
           calculatedWriteOff < 0 && "text-destructive border-destructive",
           hasAnomaly && calculatedWriteOff > 0 && "text-destructive border-destructive"
         )}>

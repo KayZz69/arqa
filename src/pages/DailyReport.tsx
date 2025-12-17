@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -9,11 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { format, subDays } from "date-fns";
 import { ru } from "date-fns/locale";
-import { CalendarIcon, ArrowLeft, Trash2, Send, Lock, Unlock, ChevronDown, ChevronUp } from "lucide-react";
+import { CalendarIcon, ArrowLeft, Trash2, Send, Lock, Unlock, ChevronDown, ChevronUp, Circle } from "lucide-react";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import { PositionCard } from "@/components/PositionCard";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { SubmitReportDialog } from "@/components/SubmitReportDialog";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -59,6 +60,7 @@ export default function DailyReport() {
   const [isLocked, setIsLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
 
   // Fetch previous day stock for all positions
   const fetchPreviousDayData = useCallback(async (date: Date, positionIds: string[]) => {
@@ -323,7 +325,7 @@ export default function DailyReport() {
     }
   };
 
-  const handleSubmitReport = async () => {
+  const openSubmitDialog = () => {
     if (isLocked && role !== "manager") return;
     
     const hasItems = Object.keys(reportItems).length > 0;
@@ -336,10 +338,10 @@ export default function DailyReport() {
       return;
     }
 
-    if (!confirm("Вы уверены, что хотите отправить этот отчёт?")) {
-      return;
-    }
+    setShowSubmitDialog(true);
+  };
 
+  const handleSubmitReport = async () => {
     try {
       setSubmitting(true);
       const { data: { user } } = await supabase.auth.getUser();
@@ -411,6 +413,12 @@ export default function DailyReport() {
       }
 
       setIsLocked(true);
+      setShowSubmitDialog(false);
+      
+      // Haptic feedback on success
+      if (navigator.vibrate) {
+        navigator.vibrate([50, 50, 100]);
+      }
       
       toast({
         title: "Успешно",
@@ -533,6 +541,51 @@ export default function DailyReport() {
     item => item.ending_stock > 0 && visiblePositions.some(p => p.id === item.position_id)
   ).length;
   const progressPercentage = totalPositions > 0 ? (filledPositions / totalPositions) * 100 : 0;
+
+  // Calculate report summary for dialog
+  const reportSummary = useMemo(() => {
+    const items = Object.values(reportItems);
+    const totalWriteOff = items.reduce((sum, item) => {
+      const writeOff = calculateWriteOff(item.position_id, item.ending_stock);
+      return sum + writeOff;
+    }, 0);
+    
+    const anomaliesCount = items.filter(item => {
+      const prev = previousDayData[item.position_id];
+      if (!prev) return false;
+      const writeOff = calculateWriteOff(item.position_id, item.ending_stock);
+      const expectedUsage = prev.ending_stock + prev.arrivals;
+      return writeOff > expectedUsage * 0.5 && writeOff > 2;
+    }).length;
+
+    return {
+      filledPositions,
+      totalPositions,
+      totalWriteOff,
+      anomaliesCount,
+    };
+  }, [reportItems, previousDayData, filledPositions, totalPositions]);
+
+  // Check if a category is fully filled
+  const isCategoryFilled = useCallback((categoryPositions: Position[]) => {
+    return categoryPositions.every(pos => {
+      const item = reportItems[pos.id];
+      return item && item.ending_stock > 0;
+    });
+  }, [reportItems]);
+
+  // Auto-collapse filled categories
+  useEffect(() => {
+    if (role !== "barista") return;
+    
+    Object.entries(groupedPositions).forEach(([category, categoryPositions]) => {
+      const allFilled = isCategoryFilled(categoryPositions);
+      // Only auto-collapse if not manually set and all filled
+      if (allFilled && openCategories[category] === undefined) {
+        setOpenCategories(prev => ({ ...prev, [category]: false }));
+      }
+    });
+  }, [reportItems, groupedPositions, role, isCategoryFilled]);
 
   const getReportStatus = () => {
     if (!reportId) return "draft";
@@ -673,31 +726,41 @@ export default function DailyReport() {
 
       <div className="space-y-4">
         {Object.entries(groupedPositions).map(([category, categoryPositions]) => {
-          const categoryFilled = categoryPositions.filter(pos => {
+          const categoryFilledCount = categoryPositions.filter(pos => {
             const item = reportItems[pos.id];
             return item && item.ending_stock > 0;
           }).length;
+          const allFilled = isCategoryFilled(categoryPositions);
           const isOpen = openCategories[category] !== false;
 
           return (
-            <Card key={category}>
+            <Card key={category} className={cn(
+              "transition-all",
+              allFilled && "border-primary/30"
+            )}>
               <Collapsible open={isOpen} onOpenChange={() => toggleCategory(category)}>
                 <CardHeader className="cursor-pointer" onClick={() => toggleCategory(category)}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
+                      {!allFilled && role === "barista" && (
+                        <Circle className="h-2 w-2 fill-amber-500 text-amber-500 shrink-0" />
+                      )}
                       <CardTitle>{category}</CardTitle>
-                      <span className="text-sm text-muted-foreground">
-                        {categoryFilled}/{categoryPositions.length}
+                      <span className={cn(
+                        "text-sm",
+                        allFilled ? "text-primary font-medium" : "text-muted-foreground"
+                      )}>
+                        {categoryFilledCount}/{categoryPositions.length}
                       </span>
                     </div>
                     <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" className="min-h-[44px] min-w-[44px]">
                         {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </Button>
                     </CollapsibleTrigger>
                   </div>
                 </CardHeader>
-                <CollapsibleContent>
+                <CollapsibleContent className="animate-accordion-down">
                   <CardContent>
                     <div className="space-y-3">
                       {categoryPositions.map(position => {
@@ -744,17 +807,19 @@ export default function DailyReport() {
               variant="destructive"
               onClick={handleDeleteReport}
               disabled={Object.keys(reportItems).length === 0}
+              className="min-h-[44px]"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Очистить черновик
             </Button>
             <Button 
-              onClick={handleSubmitReport}
+              onClick={openSubmitDialog}
               disabled={submitting || filledPositions === 0}
               size="lg"
+              className="min-h-[44px]"
             >
               <Send className="h-4 w-4 mr-2" />
-              {submitting ? "Отправка..." : "Отправить отчёт"}
+              Отправить отчёт
             </Button>
           </div>
         </div>
@@ -762,27 +827,37 @@ export default function DailyReport() {
 
       {/* Sticky Submit Button for Baristas (Mobile) */}
       {role === "barista" && !isLocked && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t p-4 md:hidden">
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t p-4 md:hidden safe-area-bottom">
           <div className="flex gap-2">
             <Button 
-              className="flex-1"
+              className="flex-1 min-h-[52px] text-base"
               size="lg"
-              onClick={handleSubmitReport}
+              onClick={openSubmitDialog}
               disabled={submitting || filledPositions === 0}
             >
-              <Send className="h-4 w-4 mr-2" />
-              {submitting ? "Отправка..." : "Отправить отчёт"}
+              <Send className="h-5 w-5 mr-2" />
+              Отправить отчёт
             </Button>
             <Button 
               variant="destructive" 
               size="lg"
               onClick={handleDeleteReport}
+              className="min-h-[52px] min-w-[52px]"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-5 w-5" />
             </Button>
           </div>
         </div>
       )}
+
+      {/* Submit Report Dialog */}
+      <SubmitReportDialog
+        open={showSubmitDialog}
+        onOpenChange={setShowSubmitDialog}
+        onConfirm={handleSubmitReport}
+        summary={reportSummary}
+        submitting={submitting}
+      />
     </div>
   );
 }
