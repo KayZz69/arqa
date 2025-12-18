@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { ClipboardList, Package, Settings, Calendar, TrendingUp, Warehouse, FileText, ShoppingCart } from "lucide-react";
 import { ReportStatusBadge } from "@/components/ReportStatusBadge";
 import { BottomNavigation } from "@/components/BottomNavigation";
+import { DashboardSkeleton, ManagerDashboardSkeleton } from "@/components/DashboardSkeleton";
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
 
@@ -131,14 +132,7 @@ const Index = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span className="text-muted-foreground">Загрузка...</span>
-        </div>
-      </div>
-    );
+    return role === "manager" ? <ManagerDashboardSkeleton /> : <DashboardSkeleton />;
   }
 
   return (
