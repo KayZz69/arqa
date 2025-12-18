@@ -525,16 +525,16 @@ export default function DailyReport() {
         // Always show manually added positions
         if (manuallyAddedPositions.includes(position.id)) return true;
         const prev = previousDayData[position.id];
-        if (!prev) return true; // Show while loading
+        if (!prev) return false; // Hide positions without previous data
         // Show if there's previous stock OR arrivals today
         return prev.ending_stock > 0 || prev.arrivals > 0;
       });
 
-  // Hidden positions for the add dialog
+  // Hidden positions for the add dialog (positions with zero stock OR no previous data)
   const hiddenPositions = positions.filter(position => {
     if (manuallyAddedPositions.includes(position.id)) return false;
     const prev = previousDayData[position.id];
-    if (!prev) return false;
+    if (!prev) return true; // Include positions without previous data
     return prev.ending_stock === 0 && prev.arrivals === 0;
   });
 
@@ -797,14 +797,6 @@ export default function DailyReport() {
                           />
           );
         })}
-
-        {/* Add Position Button for Baristas */}
-        {role === "barista" && !isLocked && hiddenPositions.length > 0 && (
-          <AddPositionDialog
-            hiddenPositions={hiddenPositions}
-            onAddPositions={(ids) => setManuallyAddedPositions(prev => [...prev, ...ids])}
-          />
-        )}
       </div>
                   </CardContent>
                 </CollapsibleContent>
@@ -812,6 +804,14 @@ export default function DailyReport() {
             </Card>
           );
         })}
+
+        {/* Add Position Button for Baristas - outside categories */}
+        {role === "barista" && !isLocked && hiddenPositions.length > 0 && (
+          <AddPositionDialog
+            hiddenPositions={hiddenPositions}
+            onAddPositions={(ids) => setManuallyAddedPositions(prev => [...prev, ...ids])}
+          />
+        )}
       </div>
 
       {/* Desktop Submit Button for Baristas */}
