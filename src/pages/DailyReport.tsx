@@ -15,6 +15,7 @@ import { PositionCard } from "@/components/PositionCard";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SubmitReportDialog } from "@/components/SubmitReportDialog";
+import { AddPositionDialog } from "@/components/AddPositionDialog";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -61,6 +62,7 @@ export default function DailyReport() {
   const [submitting, setSubmitting] = useState(false);
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [manuallyAddedPositions, setManuallyAddedPositions] = useState<string[]>([]);
 
   // Fetch previous day stock for all positions
   const fetchPreviousDayData = useCallback(async (date: Date, positionIds: string[]) => {
@@ -516,17 +518,27 @@ export default function DailyReport() {
     }
   };
 
-  // Filter positions for baristas - hide positions without stock
+  // Filter positions for baristas - hide positions without stock (unless manually added)
   const visiblePositions = role === "manager" 
     ? positions 
     : positions.filter(position => {
+        // Always show manually added positions
+        if (manuallyAddedPositions.includes(position.id)) return true;
         const prev = previousDayData[position.id];
         if (!prev) return true; // Show while loading
         // Show if there's previous stock OR arrivals today
         return prev.ending_stock > 0 || prev.arrivals > 0;
       });
 
-  const hiddenPositionsCount = positions.length - visiblePositions.length;
+  // Hidden positions for the add dialog
+  const hiddenPositions = positions.filter(position => {
+    if (manuallyAddedPositions.includes(position.id)) return false;
+    const prev = previousDayData[position.id];
+    if (!prev) return false;
+    return prev.ending_stock === 0 && prev.arrivals === 0;
+  });
+
+  const hiddenPositionsCount = hiddenPositions.length;
 
   const groupedPositions = visiblePositions.reduce((acc, position) => {
     if (!acc[position.category]) {
@@ -783,9 +795,17 @@ export default function DailyReport() {
                             disabled={isLocked && role !== "manager"}
                             onChange={(value) => handleInputChange(position.id, value)}
                           />
-                        );
-                      })}
-                    </div>
+          );
+        })}
+
+        {/* Add Position Button for Baristas */}
+        {role === "barista" && !isLocked && hiddenPositions.length > 0 && (
+          <AddPositionDialog
+            hiddenPositions={hiddenPositions}
+            onAddPositions={(ids) => setManuallyAddedPositions(prev => [...prev, ...ids])}
+          />
+        )}
+      </div>
                   </CardContent>
                 </CollapsibleContent>
               </Collapsible>
