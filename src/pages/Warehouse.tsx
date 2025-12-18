@@ -63,9 +63,15 @@ interface BatchItem {
 }
 
 interface OrderItem {
-  position: Position;
-  currentStock: number;
-  suggestedQuantity: number;
+  position_id: string;
+  name: string;
+  category: string;
+  unit: string;
+  min_stock: number;
+  order_quantity: number;
+  last_cost: number;
+  shelf_life_days: number | null;
+  current_stock: number;
 }
 
 export default function Warehouse() {
@@ -111,8 +117,8 @@ export default function Warehouse() {
       if (batchesError) throw batchesError;
       setBatches(batchesData || []);
 
-      // Calculate order needs
-      await fetchOrderNeeds(positionsData || []);
+      // Fetch order needs using optimized view
+      await fetchOrderNeeds();
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ title: "Ошибка", description: "Не удалось загрузить данные", variant: "destructive" });
@@ -121,31 +127,27 @@ export default function Warehouse() {
     }
   };
 
-  const fetchOrderNeeds = async (positionsData: Position[]) => {
-    const items: OrderItem[] = [];
+  const fetchOrderNeeds = async () => {
+    try {
+      // Single optimized query using the database view
+      const { data, error } = await supabase
+        .from("current_stock_levels")
+        .select("*")
+        .eq("active", true)
+        .order("category", { ascending: true })
+        .order("name", { ascending: true });
 
-    for (const position of positionsData) {
-      // Get latest ending stock
-      const { data: latestReport } = await supabase
-        .from("report_items")
-        .select("ending_stock")
-        .eq("position_id", position.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const currentStock = latestReport ? Number(latestReport.ending_stock) : 0;
-
-      if (currentStock < position.min_stock) {
-        items.push({
-          position,
-          currentStock,
-          suggestedQuantity: position.order_quantity,
-        });
-      }
+      if (error) throw error;
+      
+      // Filter items that need ordering
+      const itemsToOrder = (data || []).filter(
+        item => item.current_stock < item.min_stock
+      );
+      
+      setOrderItems(itemsToOrder);
+    } catch (error) {
+      console.error("Error fetching order needs:", error);
     }
-
-    setOrderItems(items);
   };
 
   const addBatchItem = () => setBatchItems([...batchItems, { positionId: "", quantity: "", costPerUnit: "" }]);
@@ -220,15 +222,15 @@ export default function Warehouse() {
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase.from("inventory_batches").insert({
-        position_id: item.position.id,
-        quantity: item.suggestedQuantity,
+        position_id: item.position_id,
+        quantity: item.order_quantity,
         arrival_date: format(new Date(), "yyyy-MM-dd"),
-        expiry_date: calculateExpiryDate(format(new Date(), "yyyy-MM-dd"), item.position.shelf_life_days),
+        expiry_date: calculateExpiryDate(format(new Date(), "yyyy-MM-dd"), item.shelf_life_days),
         created_by: user.id,
       });
 
       if (error) throw error;
-      toast({ title: "Успешно", description: `${item.position.name} отмечен как заказанный` });
+      toast({ title: "Успешно", description: `${item.name} отмечен как заказанный` });
       fetchData();
     } catch (error) {
       console.error("Error marking as ordered:", error);
@@ -331,23 +333,23 @@ export default function Warehouse() {
                       </TableHeader>
                       <TableBody>
                         {orderItems.map((item) => (
-                          <TableRow key={item.position.id}>
+                          <TableRow key={item.position_id}>
                             <TableCell>
-                              <div className="font-medium">{item.position.name}</div>
-                              <div className="text-xs text-muted-foreground">{item.position.category}</div>
+                              <div className="font-medium">{item.name}</div>
+                              <div className="text-xs text-muted-foreground">{item.category}</div>
                             </TableCell>
                             <TableCell className="text-right text-destructive font-medium">
-                              {item.currentStock} {item.position.unit}
+                              {item.current_stock} {item.unit}
                             </TableCell>
                             <TableCell className="text-right">
-                              {item.position.min_stock} {item.position.unit}
+                              {item.min_stock} {item.unit}
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              {item.suggestedQuantity} {item.position.unit}
+                              {item.order_quantity} {item.unit}
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">
-                              {item.position.last_cost > 0 
-                                ? `~${(item.suggestedQuantity * item.position.last_cost).toLocaleString()}₸`
+                              {item.last_cost > 0 
+                                ? `~${(item.order_quantity * item.last_cost).toLocaleString()}₸`
                                 : "—"
                               }
                             </TableCell>
