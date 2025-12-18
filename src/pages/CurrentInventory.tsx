@@ -22,62 +22,41 @@ import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Package, ShoppingCart } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 
-interface Position {
-  id: string;
+interface StockLevel {
+  position_id: string;
   name: string;
   category: string;
   unit: string;
   min_stock: number;
   order_quantity: number;
   last_cost: number;
-}
-
-interface InventoryLevel {
-  position: Position;
-  currentStock: number;
+  current_stock: number;
 }
 
 export default function CurrentInventory() {
   const navigate = useNavigate();
   const { role } = useUserRole();
-  const [inventoryLevels, setInventoryLevels] = useState<InventoryLevel[]>([]);
+  const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchInventoryLevels();
+    fetchStockLevels();
   }, []);
 
-  const fetchInventoryLevels = async () => {
+  const fetchStockLevels = async () => {
     try {
-      const { data: positions, error: positionsError } = await supabase
-        .from("positions")
+      // Single optimized query using the database view
+      const { data, error } = await supabase
+        .from("current_stock_levels")
         .select("*")
         .eq("active", true)
         .order("category", { ascending: true })
         .order("name", { ascending: true });
 
-      if (positionsError) throw positionsError;
-
-      const levels: InventoryLevel[] = await Promise.all(
-        (positions || []).map(async (position) => {
-          const { data: latestReport } = await supabase
-            .from("report_items")
-            .select("ending_stock")
-            .eq("position_id", position.id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          return {
-            position,
-            currentStock: latestReport ? Number(latestReport.ending_stock) : 0,
-          };
-        })
-      );
-
-      setInventoryLevels(levels);
+      if (error) throw error;
+      setStockLevels(data || []);
     } catch (error) {
-      console.error("Error fetching inventory levels:", error);
+      console.error("Error fetching stock levels:", error);
       toast({
         title: "Ошибка",
         description: "Не удалось загрузить инвентарь",
@@ -111,12 +90,12 @@ export default function CurrentInventory() {
   };
 
   // Group by category
-  const groupedInventory = inventoryLevels.reduce((acc, item) => {
-    const category = item.position.category;
+  const groupedInventory = stockLevels.reduce((acc, item) => {
+    const category = item.category;
     if (!acc[category]) acc[category] = [];
     acc[category].push(item);
     return acc;
-  }, {} as Record<string, InventoryLevel[]>);
+  }, {} as Record<string, StockLevel[]>);
 
   if (loading) {
     return (
@@ -162,13 +141,13 @@ export default function CurrentInventory() {
                     </TableHeader>
                     <TableBody>
                       {items.map((item) => {
-                        const status = getStatus(item.currentStock, item.position.min_stock);
-                        const stockValue = item.currentStock * (item.position.last_cost || 0);
+                        const status = getStatus(item.current_stock, item.min_stock);
+                        const stockValue = item.current_stock * (item.last_cost || 0);
                         return (
-                          <TableRow key={item.position.id}>
-                            <TableCell className="font-medium">{item.position.name}</TableCell>
+                          <TableRow key={item.position_id}>
+                            <TableCell className="font-medium">{item.name}</TableCell>
                             <TableCell className="text-right">
-                              {item.currentStock} {item.position.unit}
+                              {item.current_stock} {item.unit}
                             </TableCell>
                             {role === "manager" && (
                               <TableCell className="text-right text-muted-foreground">

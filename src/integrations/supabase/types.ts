@@ -101,6 +101,13 @@ export type Database = {
             foreignKeyName: "inventory_batches_position_id_fkey"
             columns: ["position_id"]
             isOneToOne: false
+            referencedRelation: "current_stock_levels"
+            referencedColumns: ["position_id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
             referencedRelation: "positions"
             referencedColumns: ["id"]
           },
@@ -241,6 +248,13 @@ export type Database = {
             foreignKeyName: "report_items_position_id_fkey"
             columns: ["position_id"]
             isOneToOne: false
+            referencedRelation: "current_stock_levels"
+            referencedColumns: ["position_id"]
+          },
+          {
+            foreignKeyName: "report_items_position_id_fkey"
+            columns: ["position_id"]
+            isOneToOne: false
             referencedRelation: "positions"
             referencedColumns: ["id"]
           },
@@ -284,7 +298,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      current_stock_levels: {
+        Row: {
+          active: boolean | null
+          category: string | null
+          current_stock: number | null
+          last_cost: number | null
+          min_stock: number | null
+          name: string | null
+          order_quantity: number | null
+          position_id: string | null
+          shelf_life_days: number | null
+          unit: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          category?: string | null
+          current_stock?: never
+          last_cost?: number | null
+          min_stock?: number | null
+          name?: string | null
+          order_quantity?: number | null
+          position_id?: string | null
+          shelf_life_days?: number | null
+          unit?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          category?: string | null
+          current_stock?: never
+          last_cost?: number | null
+          min_stock?: number | null
+          name?: string | null
+          order_quantity?: number | null
+          position_id?: string | null
+          shelf_life_days?: number | null
+          unit?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
