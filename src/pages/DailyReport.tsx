@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { SubmitReportDialog } from "@/components/SubmitReportDialog";
 import { AddPositionDialog } from "@/components/AddPositionDialog";
+import { PullToRefreshIndicator } from "@/components/PullToRefreshIndicator";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -210,6 +212,29 @@ export default function DailyReport() {
       }
     }
   }, [selectedDate, fetchReport, fetchPreviousDayData, positions]);
+
+  // Refresh function for pull-to-refresh
+  const handleRefresh = useCallback(async () => {
+    if (positions.length > 0) {
+      await Promise.all([
+        fetchReport(selectedDate),
+        fetchPreviousDayData(selectedDate, positions.map(p => p.id)),
+      ]);
+      toast({
+        title: "Данные обновлены",
+        description: "Отчёт успешно обновлён",
+      });
+    }
+  }, [selectedDate, positions, fetchReport, fetchPreviousDayData, toast]);
+
+  // Pull-to-refresh hook
+  const {
+    containerRef,
+    pullDistance,
+    isRefreshing,
+    progress,
+    shouldTrigger,
+  } = usePullToRefresh({ onRefresh: handleRefresh });
 
   const calculateWriteOff = (positionId: string, endingStock: number): number => {
     const prev = previousDayData[positionId] || { ending_stock: 0, arrivals: 0 };
@@ -622,7 +647,16 @@ export default function DailyReport() {
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-6 pb-24 md:pb-6">
+    <div 
+      ref={containerRef}
+      className="container mx-auto p-4 md:p-6 pb-24 md:pb-6 min-h-screen overflow-auto"
+    >
+      <PullToRefreshIndicator
+        pullDistance={pullDistance}
+        isRefreshing={isRefreshing}
+        progress={progress}
+        shouldTrigger={shouldTrigger}
+      />
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
