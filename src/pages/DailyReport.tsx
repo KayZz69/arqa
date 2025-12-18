@@ -18,6 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { SubmitReportDialog } from "@/components/SubmitReportDialog";
 import { AddPositionDialog } from "@/components/AddPositionDialog";
 import { PullToRefreshIndicator } from "@/components/PullToRefreshIndicator";
+import { DailyReportSkeleton } from "@/components/DailyReportSkeleton";
 import { cn } from "@/lib/utils";
 import { z } from "zod";
 
@@ -635,7 +636,7 @@ export default function DailyReport() {
   };
 
   if (roleLoading || loading) {
-    return <div className="flex min-h-screen items-center justify-center">Загрузка...</div>;
+    return <DailyReportSkeleton />;
   }
 
   if (role !== "barista" && role !== "manager") {
