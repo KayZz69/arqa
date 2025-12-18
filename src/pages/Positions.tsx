@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -133,6 +133,43 @@ const Positions = () => {
       setLoading(false);
     }
   };
+
+  // Inline edit refs and handlers
+  const updateTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
+  
+  const handleInlineUpdate = useCallback(async (
+    positionId: string, 
+    field: 'min_stock' | 'order_quantity' | 'active', 
+    value: number | boolean
+  ) => {
+    // Update local state immediately for instant feedback
+    setPositions(prev => prev.map(p => 
+      p.id === positionId ? { ...p, [field]: value } : p
+    ));
+    
+    // Clear existing timeout for this position+field
+    const timeoutKey = `${positionId}-${field}`;
+    if (updateTimeouts.current[timeoutKey]) {
+      clearTimeout(updateTimeouts.current[timeoutKey]);
+    }
+    
+    // Debounce the database update
+    updateTimeouts.current[timeoutKey] = setTimeout(async () => {
+      try {
+        const { error } = await supabase
+          .from("positions")
+          .update({ [field]: value })
+          .eq("id", positionId);
+        
+        if (error) throw error;
+      } catch (error: any) {
+        toast.error("Не удалось сохранить изменение");
+        console.error("Error:", error);
+        // Revert on error
+        fetchPositions();
+      }
+    }, 500);
+  }, []);
 
   // Position handlers
   const handleOpenDialog = (position?: Position) => {
@@ -508,12 +545,41 @@ const Positions = () => {
                         <TableRow key={position.id}>
                           <TableCell className="font-medium">{position.name}</TableCell>
                           <TableCell>{position.unit}</TableCell>
-                          <TableCell>{position.min_stock}</TableCell>
-                          <TableCell>{position.order_quantity}</TableCell>
                           <TableCell>
-                            <span className={position.active ? "text-green-600" : "text-muted-foreground"}>
-                              {position.active ? "Активна" : "Неактивна"}
-                            </span>
+                            <Input
+                              type="number"
+                              min="0"
+                              className="w-20 h-8 text-center"
+                              value={position.min_stock}
+                              onChange={(e) => handleInlineUpdate(
+                                position.id, 
+                                'min_stock', 
+                                parseFloat(e.target.value) || 0
+                              )}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              min="0"
+                              className="w-20 h-8 text-center"
+                              value={position.order_quantity}
+                              onChange={(e) => handleInlineUpdate(
+                                position.id, 
+                                'order_quantity', 
+                                parseFloat(e.target.value) || 0
+                              )}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={position.active}
+                              onCheckedChange={(checked) => handleInlineUpdate(
+                                position.id, 
+                                'active', 
+                                checked
+                              )}
+                            />
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
