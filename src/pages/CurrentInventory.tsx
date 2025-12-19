@@ -1,6 +1,4 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -13,59 +11,19 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Package, ShoppingCart } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
-
-interface StockLevel {
-  position_id: string;
-  name: string;
-  category: string;
-  unit: string;
-  min_stock: number;
-  order_quantity: number;
-  last_cost: number;
-  current_stock: number;
-}
+import { useCurrentStock } from "@/hooks/useCurrentStock";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function CurrentInventory() {
   const navigate = useNavigate();
   const { role } = useUserRole();
-  const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchStockLevels();
-  }, []);
-
-  const fetchStockLevels = async () => {
-    try {
-      // Single optimized query using the database view
-      const { data, error } = await supabase
-        .from("current_stock_levels")
-        .select("*")
-        .eq("active", true)
-        .order("category", { ascending: true })
-        .order("name", { ascending: true });
-
-      if (error) throw error;
-      setStockLevels(data || []);
-    } catch (error) {
-      console.error("Error fetching stock levels:", error);
-      toast({
-        title: "Ошибка",
-        description: "Не удалось загрузить инвентарь",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: stockLevels = [], isLoading } = useCurrentStock(true);
 
   const getStatus = (currentStock: number, minStock: number): "critical" | "low" | "ok" => {
     if (currentStock <= 0) return "critical";
@@ -91,16 +49,36 @@ export default function CurrentInventory() {
 
   // Group by category
   const groupedInventory = stockLevels.reduce((acc, item) => {
-    const category = item.category;
+    const category = item.category || "Без категории";
     if (!acc[category]) acc[category] = [];
     acc[category].push(item);
     return acc;
-  }, {} as Record<string, StockLevel[]>);
+  }, {} as Record<string, typeof stockLevels>);
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Загрузка...</p>
+      <div className="min-h-screen bg-background p-4 md:p-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div className="flex items-center gap-4 mb-6">
+            <Skeleton className="h-10 w-10" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+          </div>
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardHeader><Skeleton className="h-6 w-24" /></CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {[1, 2, 3].map((j) => (
+                    <Skeleton key={j} className="h-12 w-full" />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
@@ -141,13 +119,13 @@ export default function CurrentInventory() {
                     </TableHeader>
                     <TableBody>
                       {items.map((item) => {
-                        const status = getStatus(item.current_stock, item.min_stock);
-                        const stockValue = item.current_stock * (item.last_cost || 0);
+                        const status = getStatus(item.current_stock || 0, item.min_stock || 0);
+                        const stockValue = (item.current_stock || 0) * (item.last_cost || 0);
                         return (
                           <TableRow key={item.position_id}>
                             <TableCell className="font-medium">{item.name}</TableCell>
                             <TableCell className="text-right">
-                              {item.current_stock} {item.unit}
+                              {item.current_stock || 0} {item.unit}
                             </TableCell>
                             {role === "manager" && (
                               <TableCell className="text-right text-muted-foreground">
