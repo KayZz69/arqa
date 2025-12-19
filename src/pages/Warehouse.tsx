@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -28,22 +28,15 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
+import { usePositions } from "@/hooks/usePositions";
+import { useOrderNeeds } from "@/hooks/useCurrentStock";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Trash2, X, ShoppingCart, Package, History } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ExcelImport } from "@/components/ExcelImport";
-
-interface Position {
-  id: string;
-  name: string;
-  category: string;
-  unit: string;
-  shelf_life_days: number | null;
-  min_stock: number;
-  order_quantity: number;
-  last_cost: number;
-}
 
 interface InventoryBatch {
   id: string;
@@ -53,7 +46,13 @@ interface InventoryBatch {
   arrival_date: string;
   expiry_date: string | null;
   created_at: string;
-  positions: Position;
+  positions: {
+    id: string;
+    name: string;
+    category: string;
+    unit: string;
+    shelf_life_days: number | null;
+  };
 }
 
 interface BatchItem {
@@ -62,93 +61,33 @@ interface BatchItem {
   costPerUnit: string;
 }
 
-interface OrderItem {
-  position_id: string;
-  name: string;
-  category: string;
-  unit: string;
-  min_stock: number;
-  order_quantity: number;
-  last_cost: number;
-  shelf_life_days: number | null;
-  current_stock: number;
-}
-
 export default function Warehouse() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { role, loading: roleLoading } = useUserRole();
-  const [positions, setPositions] = useState<Position[]>([]);
-  const [batches, setBatches] = useState<InventoryBatch[]>([]);
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: positions = [], isLoading: positionsLoading } = usePositions(true);
+  const { data: orderItems = [], isLoading: orderLoading } = useOrderNeeds();
   const [submitting, setSubmitting] = useState(false);
 
   // Form state
   const [arrivalDate, setArrivalDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [batchItems, setBatchItems] = useState<BatchItem[]>([{ positionId: "", quantity: "", costPerUnit: "" }]);
 
-  useEffect(() => {
-    if (!roleLoading && role !== "manager") {
-      navigate("/");
-      return;
-    }
-    fetchData();
-  }, [roleLoading, role, navigate]);
-
-  const fetchData = async () => {
-    try {
-      // Fetch positions
-      const { data: positionsData, error: positionsError } = await supabase
-        .from("positions")
-        .select("*")
-        .eq("active", true)
-        .order("category", { ascending: true })
-        .order("name", { ascending: true });
-
-      if (positionsError) throw positionsError;
-      setPositions(positionsData || []);
-
-      // Fetch batches with position details
-      const { data: batchesData, error: batchesError } = await supabase
-        .from("inventory_batches")
-        .select(`*, positions (id, name, category, unit, shelf_life_days, min_stock, order_quantity, last_cost)`)
-        .order("arrival_date", { ascending: false });
-
-      if (batchesError) throw batchesError;
-      setBatches(batchesData || []);
-
-      // Fetch order needs using optimized view
-      await fetchOrderNeeds();
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      toast({ title: "Ошибка", description: "Не удалось загрузить данные", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchOrderNeeds = async () => {
-    try {
-      // Single optimized query using the database view
+  // Fetch batches
+  const { data: batches = [], isLoading: batchesLoading } = useQuery({
+    queryKey: ["inventoryBatches"],
+    queryFn: async () => {
       const { data, error } = await supabase
-        .from("current_stock_levels")
-        .select("*")
-        .eq("active", true)
-        .order("category", { ascending: true })
-        .order("name", { ascending: true });
-
+        .from("inventory_batches")
+        .select(`*, positions (id, name, category, unit, shelf_life_days)`)
+        .order("arrival_date", { ascending: false });
       if (error) throw error;
-      
-      // Filter items that need ordering
-      const itemsToOrder = (data || []).filter(
-        item => item.current_stock < item.min_stock
-      );
-      
-      setOrderItems(itemsToOrder);
-    } catch (error) {
-      console.error("Error fetching order needs:", error);
-    }
-  };
+      return data as InventoryBatch[];
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const isLoading = positionsLoading || orderLoading || batchesLoading;
 
   const addBatchItem = () => setBatchItems([...batchItems, { positionId: "", quantity: "", costPerUnit: "" }]);
   const removeBatchItem = (index: number) => {
@@ -164,6 +103,12 @@ export default function Warehouse() {
   const calculateExpiryDate = (arrivalDate: string, shelfLifeDays: number | null): string | null => {
     if (!shelfLifeDays) return null;
     return format(addDays(new Date(arrivalDate), shelfLifeDays), "yyyy-MM-dd");
+  };
+
+  const invalidateQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ["inventoryBatches"] });
+    queryClient.invalidateQueries({ queryKey: ["currentStock"] });
+    queryClient.invalidateQueries({ queryKey: ["positions"] });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -207,7 +152,7 @@ export default function Warehouse() {
       toast({ title: "Успешно", description: `Добавлено ${validItems.length} позиций` });
       setArrivalDate(format(new Date(), "yyyy-MM-dd"));
       setBatchItems([{ positionId: "", quantity: "", costPerUnit: "" }]);
-      fetchData();
+      invalidateQueries();
     } catch (error) {
       console.error("Error adding batch:", error);
       toast({ title: "Ошибка", description: "Не удалось добавить партию", variant: "destructive" });
@@ -216,7 +161,7 @@ export default function Warehouse() {
     }
   };
 
-  const handleMarkAsOrdered = async (item: OrderItem) => {
+  const handleMarkAsOrdered = async (item: typeof orderItems[0]) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
@@ -231,7 +176,7 @@ export default function Warehouse() {
 
       if (error) throw error;
       toast({ title: "Успешно", description: `${item.name} отмечен как заказанный` });
-      fetchData();
+      invalidateQueries();
     } catch (error) {
       console.error("Error marking as ordered:", error);
       toast({ title: "Ошибка", description: "Не удалось отметить как заказанный", variant: "destructive" });
@@ -244,7 +189,7 @@ export default function Warehouse() {
       const { error } = await supabase.from("inventory_batches").delete().eq("id", batchId);
       if (error) throw error;
       toast({ title: "Успешно", description: "Партия удалена" });
-      fetchData();
+      invalidateQueries();
     } catch (error) {
       console.error("Error deleting batch:", error);
       toast({ title: "Ошибка", description: "Не удалось удалить партию", variant: "destructive" });
@@ -252,7 +197,7 @@ export default function Warehouse() {
   };
 
   const getExpiryStatus = (batch: InventoryBatch) => {
-    const expiryDateStr = batch.expiry_date || (batch.positions.shelf_life_days
+    const expiryDateStr = batch.expiry_date || (batch.positions?.shelf_life_days
       ? calculateExpiryDate(batch.arrival_date, batch.positions.shelf_life_days)
       : null);
     if (!expiryDateStr) return "normal";
@@ -264,11 +209,37 @@ export default function Warehouse() {
     return "normal";
   };
 
-  if (roleLoading || loading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Загрузка...</p></div>;
+  if (roleLoading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
   }
 
-  if (role !== "manager") return null;
+  if (role !== "manager") {
+    navigate("/");
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background p-4 md:p-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex items-center gap-4 mb-6">
+            <Skeleton className="h-10 w-10" />
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-full" />
+          <Card>
+            <CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
+            <CardContent className="space-y-2">
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -339,17 +310,17 @@ export default function Warehouse() {
                               <div className="text-xs text-muted-foreground">{item.category}</div>
                             </TableCell>
                             <TableCell className="text-right text-destructive font-medium">
-                              {item.current_stock} {item.unit}
+                              {item.current_stock || 0} {item.unit}
                             </TableCell>
                             <TableCell className="text-right">
-                              {item.min_stock} {item.unit}
+                              {item.min_stock || 0} {item.unit}
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              {item.order_quantity} {item.unit}
+                              {item.order_quantity || 0} {item.unit}
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground">
-                              {item.last_cost > 0 
-                                ? `~${(item.order_quantity * item.last_cost).toLocaleString()}₸`
+                              {(item.last_cost || 0) > 0 
+                                ? `~${((item.order_quantity || 0) * (item.last_cost || 0)).toLocaleString()}₸`
                                 : "—"
                               }
                             </TableCell>
@@ -437,11 +408,14 @@ export default function Warehouse() {
                   </div>
 
                   <div className="pt-2 border-t">
-                    <ExcelImport positions={positions} onImportComplete={fetchData} />
+                    <ExcelImport
+                      positions={positions}
+                      onImportComplete={invalidateQueries}
+                    />
                   </div>
 
                   <Button type="submit" className="w-full" disabled={submitting}>
-                    {submitting ? "Добавление..." : "Добавить партию"}
+                    {submitting ? "Сохранение..." : "Сохранить приход"}
                   </Button>
                 </form>
               </CardContent>
@@ -456,68 +430,64 @@ export default function Warehouse() {
                   <History className="h-5 w-5" />
                   История поставок
                 </CardTitle>
-                <CardDescription>Все добавленные партии инвентаря</CardDescription>
+                <CardDescription>Все поставки, отсортированные по дате прибытия</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Позиция</TableHead>
-                        <TableHead className="text-right">Кол-во</TableHead>
-                        <TableHead className="text-right">Себест.</TableHead>
-                        <TableHead className="text-right">Сумма</TableHead>
-                        <TableHead>Прибытие</TableHead>
-                        <TableHead>Истекает</TableHead>
-                        <TableHead className="text-right">Действия</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {batches.length === 0 ? (
+                {batches.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">Нет записей о поставках</p>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground">
-                            Нет партий
-                          </TableCell>
+                          <TableHead>Позиция</TableHead>
+                          <TableHead className="text-right">Кол-во</TableHead>
+                          <TableHead className="text-right">Себест.</TableHead>
+                          <TableHead className="text-right">Прибытие</TableHead>
+                          <TableHead className="text-right">Годен до</TableHead>
+                          <TableHead className="text-right"></TableHead>
                         </TableRow>
-                      ) : (
-                        batches.map((batch) => {
-                          const status = getExpiryStatus(batch);
-                          const totalCost = batch.quantity * (batch.cost_per_unit || 0);
+                      </TableHeader>
+                      <TableBody>
+                        {batches.map((batch) => {
+                          const expiryStatus = getExpiryStatus(batch);
+                          const expiryDateStr = batch.expiry_date || (batch.positions?.shelf_life_days
+                            ? calculateExpiryDate(batch.arrival_date, batch.positions.shelf_life_days)
+                            : null);
                           return (
                             <TableRow key={batch.id}>
                               <TableCell>
-                                <div className="font-medium">{batch.positions.name}</div>
-                                <div className="text-xs text-muted-foreground">{batch.positions.category}</div>
+                                <div className="font-medium">{batch.positions?.name}</div>
+                                <div className="text-xs text-muted-foreground">{batch.positions?.category}</div>
                               </TableCell>
                               <TableCell className="text-right">
-                                {batch.quantity} {batch.positions.unit}
+                                {batch.quantity} {batch.positions?.unit}
                               </TableCell>
                               <TableCell className="text-right text-muted-foreground">
-                                {batch.cost_per_unit > 0 ? `${batch.cost_per_unit.toLocaleString()}₸` : "—"}
+                                {batch.cost_per_unit > 0 ? `${batch.cost_per_unit}₸` : "—"}
                               </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {totalCost > 0 ? `${totalCost.toLocaleString()}₸` : "—"}
+                              <TableCell className="text-right">
+                                {format(new Date(batch.arrival_date), "dd.MM.yyyy")}
                               </TableCell>
-                              <TableCell>{format(new Date(batch.arrival_date), "dd.MM.yyyy")}</TableCell>
-                              <TableCell>
-                                {batch.expiry_date ? (
-                                  <Badge variant={status === "expired" ? "destructive" : status === "expiring" ? "default" : "secondary"}>
-                                    {format(new Date(batch.expiry_date), "dd.MM.yyyy")}
+                              <TableCell className="text-right">
+                                {expiryDateStr ? (
+                                  <Badge variant={expiryStatus === "expired" ? "destructive" : expiryStatus === "expiring" ? "default" : "secondary"}>
+                                    {format(new Date(expiryDateStr), "dd.MM.yyyy")}
                                   </Badge>
                                 ) : "—"}
                               </TableCell>
                               <TableCell className="text-right">
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteBatch(batch.id)}>
-                                  <Trash2 className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteBatch(batch.id)}>
+                                  <Trash2 className="h-4 w-4 text-destructive" />
                                 </Button>
                               </TableCell>
                             </TableRow>
                           );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
