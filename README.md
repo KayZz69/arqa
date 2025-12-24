@@ -1,73 +1,78 @@
-# Welcome to your Lovable project
+# ARQA - Inventory & Daily Reporting System
 
-## Project info
+A React-based inventory management and daily reporting system for cafés and restaurants. Baristas submit daily stock reports while managers oversee inventory, orders, and analytics.
 
-**URL**: https://lovable.dev/projects/03e620c3-ee28-483d-8767-4af272e80530
+## Features
 
-## How can I edit this code?
+- 📊 **Daily Reports** - Baristas submit end-of-day stock counts with automatic write-off calculations
+- 📦 **Inventory Management** - Track positions, categories, and stock levels
+- 🏭 **Warehouse** - Manage arrivals, costs, and expiry dates with Excel import support
+- 🔔 **Notifications** - Automatic alerts for low stock and high write-offs
+- 👥 **Role-Based Access** - Separate barista and manager permissions
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend**: React 18 + TypeScript + Vite
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Backend**: Supabase (PostgreSQL + Auth)
+- **State**: React Query (@tanstack/react-query)
+- **Routing**: React Router v6
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/03e620c3-ee28-483d-8767-4af272e80530) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js 18+ and npm ([install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating))
+- Supabase project with configured tables
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Installation
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+```bash
+# Clone the repository
 git clone <YOUR_GIT_URL>
+cd arqa
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Create a `.env` file in the project root:
 
-**Use GitHub Codespaces**
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `VITE_SUPABASE_PROJECT_ID` | Supabase project identifier | `urrfxcmulgycirzqgcma` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase anonymous/public key | `eyJhbGciOiJI...` |
+| `VITE_SUPABASE_URL` | Supabase API endpoint URL | `https://xxx.supabase.co` |
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+> **Note**: These are client-side variables prefixed with `VITE_`. Never expose service role keys in frontend code.
 
-## What technologies are used for this project?
+## Scripts
 
-This project is built with:
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Build for production |
+| `npm run preview` | Preview production build |
+| `npm run lint` | Run ESLint |
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Project Structure
 
-## How can I deploy this project?
+```
+src/
+├── components/       # Reusable UI components
+│   └── ui/          # shadcn/ui base components
+├── hooks/           # Custom React hooks
+├── integrations/    # External service clients (Supabase)
+├── lib/             # Utilities
+├── pages/           # Route page components
+└── services/        # Business logic services
+```
 
-Simply open [Lovable](https://lovable.dev/projects/03e620c3-ee28-483d-8767-4af272e80530) and click on Share -> Publish.
+## Documentation
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- [Architecture Overview](./architecture.md) - System design and data model
