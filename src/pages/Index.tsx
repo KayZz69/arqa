@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/contexts/AuthContext";
 import { useDisplayName } from "@/hooks/useDisplayName";
 import { toast } from "sonner";
 import { ClipboardList, Package, Settings, Calendar, TrendingUp, Warehouse, FileText, ShoppingCart } from "lucide-react";
@@ -17,8 +17,7 @@ import { ru } from "date-fns/locale";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { role, loading } = useUserRole();
-  const [user, setUser] = useState<any>(null);
+  const { user, role, loading } = useAuth();
   const [todayReport, setTodayReport] = useState<any>(null);
   const [weeklyStats, setWeeklyStats] = useState({ submitted: 0, total: 7 });
   const { displayName } = useDisplayName(user?.id);
@@ -28,17 +27,16 @@ const Index = () => {
   const [todayReportsCount, setTodayReportsCount] = useState({ submitted: 0, total: 0 });
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user);
-      if (user && role === "barista") {
-        fetchTodayReport(user.id);
-        fetchWeeklyStats(user.id);
-      }
-      if (user && role === "manager") {
-        fetchManagerMetrics();
-      }
-    });
-  }, [role]);
+    if (!user || loading) return;
+
+    if (role === "barista") {
+      fetchTodayReport(user.id);
+      fetchWeeklyStats(user.id);
+    }
+    if (role === "manager") {
+      fetchManagerMetrics();
+    }
+  }, [user, role, loading]);
 
   const fetchTodayReport = async (userId: string) => {
     try {
@@ -72,40 +70,48 @@ const Index = () => {
 
   const fetchManagerMetrics = async () => {
     try {
-      const { data: positions } = await supabase
-        .from("positions")
-        .select("id, min_stock")
-        .eq("active", true);
-
-      let needsOrder = 0;
-      for (const position of positions || []) {
-        const { data: latestReport } = await supabase
+      // Fetch all positions and all report items in parallel (eliminates N+1 queries)
+      const [positionsResult, reportItemsResult, todayReportsResult, baristaCountResult] = await Promise.all([
+        supabase
+          .from("positions")
+          .select("id, min_stock")
+          .eq("active", true),
+        supabase
           .from("report_items")
-          .select("ending_stock")
-          .eq("position_id", position.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        const currentStock = latestReport ? Number(latestReport.ending_stock) : 0;
+          .select("position_id, ending_stock, created_at")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("daily_reports")
+          .select("is_locked")
+          .eq("report_date", format(new Date(), "yyyy-MM-dd")),
+        supabase
+          .from("user_roles")
+          .select("*", { count: "exact", head: true })
+          .eq("role", "barista"),
+      ]);
+
+      const positions = positionsResult.data || [];
+      const reportItems = reportItemsResult.data || [];
+
+      // Build a map of position_id -> latest ending_stock (first occurrence is latest due to ordering)
+      const latestStockByPosition = new Map<string, number>();
+      for (const item of reportItems) {
+        if (!latestStockByPosition.has(item.position_id)) {
+          latestStockByPosition.set(item.position_id, Number(item.ending_stock) || 0);
+        }
+      }
+
+      // Count positions that need ordering
+      let needsOrder = 0;
+      for (const position of positions) {
+        const currentStock = latestStockByPosition.get(position.id) ?? 0;
         if (currentStock < position.min_stock) needsOrder++;
       }
       setOrderCount(needsOrder);
 
-      const today = format(new Date(), "yyyy-MM-dd");
-      const { data: todayReports } = await supabase
-        .from("daily_reports")
-        .select("is_locked")
-        .eq("report_date", today);
-
-      const { count: baristaCount } = await supabase
-        .from("user_roles")
-        .select("*", { count: "exact", head: true })
-        .eq("role", "barista");
-
       setTodayReportsCount({
-        submitted: todayReports?.filter(r => r.is_locked).length || 0,
-        total: baristaCount || 0,
+        submitted: todayReportsResult.data?.filter(r => r.is_locked).length || 0,
+        total: baristaCountResult.count || 0,
       });
     } catch (error) {
       console.error("Error fetching manager metrics:", error);
@@ -194,17 +200,17 @@ const Index = () => {
                     <ReportStatusBadge status={getReportStatus()} />
                   </div>
                   {!todayReport || !todayReport.is_locked ? (
-                    <Button 
-                      className="w-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0 h-12 rounded-xl font-medium" 
-                      size="lg" 
+                    <Button
+                      className="w-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0 h-12 rounded-xl font-medium"
+                      size="lg"
                       onClick={() => navigate("/daily-report")}
                     >
                       {todayReport ? "Продолжить заполнение" : "Создать отчёт"}
                     </Button>
                   ) : (
-                    <Button 
-                      className="w-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0 h-12 rounded-xl font-medium" 
-                      variant="outline" 
+                    <Button
+                      className="w-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0 h-12 rounded-xl font-medium"
+                      variant="outline"
                       onClick={() => navigate("/daily-report")}
                     >
                       Просмотреть отчёт
@@ -235,7 +241,7 @@ const Index = () => {
 
               {/* Navigation Cards */}
               <div className="grid gap-4 md:grid-cols-2 animate-slide-up opacity-0 stagger-3">
-                <Card 
+                <Card
                   className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
                   onClick={() => navigate("/current-inventory")}
                 >
@@ -251,7 +257,7 @@ const Index = () => {
                     </div>
                   </CardHeader>
                 </Card>
-                <Card 
+                <Card
                   className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
                   onClick={() => navigate("/report-history")}
                 >
@@ -306,7 +312,7 @@ const Index = () => {
 
               {/* Navigation Cards */}
               <div className="grid gap-4 md:grid-cols-3 animate-slide-up opacity-0 stagger-2">
-                <Card 
+                <Card
                   className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
                   onClick={() => navigate("/warehouse")}
                 >
@@ -326,7 +332,7 @@ const Index = () => {
                   </CardHeader>
                 </Card>
 
-                <Card 
+                <Card
                   className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
                   onClick={() => navigate("/manager-reports")}
                 >
@@ -343,7 +349,7 @@ const Index = () => {
                   </CardHeader>
                 </Card>
 
-                <Card 
+                <Card
                   className="cursor-pointer hover-lift border-2 hover:border-primary/50 group"
                   onClick={() => navigate("/positions")}
                 >
