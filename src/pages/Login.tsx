@@ -30,7 +30,7 @@ const Login = () => {
     if (selectedRole) {
       const fetchUsers = async () => {
         setLoading(true);
-        
+
         const { data: roleData, error: roleError } = await supabase
           .from('user_roles')
           .select('user_id')
@@ -45,7 +45,7 @@ const Login = () => {
 
         if (roleData && roleData.length > 0) {
           const userIds = roleData.map(r => r.user_id);
-          
+
           const { data: profiles, error: profileError } = await supabase
             .from('profiles')
             .select('user_id, display_name, username')
@@ -60,7 +60,7 @@ const Login = () => {
         } else {
           setUsers([]);
         }
-        
+
         setLoading(false);
       };
       fetchUsers();
@@ -82,7 +82,7 @@ const Login = () => {
     if (!selectedUser) return;
 
     setLoading(true);
-    const email = `${selectedUser.username}@barista.local`;
+    const email = `${selectedUser.username}@arqa.user`;
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -227,9 +227,9 @@ const Login = () => {
                   className="h-14 text-lg rounded-xl border-2 focus:border-primary"
                 />
               </div>
-              <Button 
-                type="submit" 
-                className="w-full h-14 text-lg rounded-xl gradient-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all" 
+              <Button
+                type="submit"
+                className="w-full h-14 text-lg rounded-xl gradient-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all"
                 disabled={loading}
               >
                 {loading ? (
