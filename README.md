@@ -10,6 +10,9 @@ A React-based inventory management and daily reporting system for cafés and res
 - 🔔 **Notifications** - Automatic alerts for low stock and high write-offs
 - 👥 **Role-Based Access** - Separate barista and manager permissions
 
+- **Prefill from Yesterday** - Copy prior day values to speed up report entry
+- **Quick Search** - Filter positions and warehouse history lists by keyword
+
 ## Tech Stack
 
 - **Frontend**: React 18 + TypeScript + Vite

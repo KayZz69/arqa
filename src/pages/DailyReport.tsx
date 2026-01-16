@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -20,6 +20,7 @@ import { AddPositionDialog } from "@/components/AddPositionDialog";
 import { PullToRefreshIndicator } from "@/components/PullToRefreshIndicator";
 import { DailyReportSkeleton } from "@/components/DailyReportSkeleton";
 import { cn } from "@/lib/utils";
+import { applyPrefillFromYesterday, getPrefillableCount } from "@/lib/reportPrefill";
 import {
   reportItemSchema,
   type Position,
@@ -51,12 +52,14 @@ export default function DailyReport() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [reportItems, setReportItems] = useState<Record<string, ReportItem>>({});
   const [previousDayData, setPreviousDayData] = useState<Record<string, PreviousDayData>>({});
+  const [previousReportItems, setPreviousReportItems] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [manuallyAddedPositions, setManuallyAddedPositions] = useState<string[]>([]);
+  const saveTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Fetch previous day stock for all positions
   const fetchPreviousDayData = useCallback(async (date: Date, positionIds: string[]) => {
@@ -86,6 +89,7 @@ export default function DailyReport() {
         });
       }
     }
+    setPreviousReportItems(prevItems);
 
     // Get arrivals for current date
     const { data: batches } = await supabase
@@ -119,7 +123,7 @@ export default function DailyReport() {
 
       let query = supabase
         .from("daily_reports")
-        .select("*")
+        .select("id, is_locked")
         .eq("report_date", dateString);
 
       if (role !== "manager") {
@@ -134,7 +138,7 @@ export default function DailyReport() {
 
         const { data: items } = await supabase
           .from("report_items")
-          .select("*")
+          .select("id, position_id, ending_stock, write_off")
           .eq("report_id", existingReport.id);
 
         if (items) {
@@ -177,10 +181,6 @@ export default function DailyReport() {
         if (error) throw error;
         setPositions(data || []);
 
-        // Fetch previous day data for all positions
-        if (data && data.length > 0) {
-          fetchPreviousDayData(selectedDate, data.map(p => p.id));
-        }
       } catch (error) {
         console.error("Error fetching positions:", error);
         toast({
@@ -267,6 +267,22 @@ export default function DailyReport() {
     }
   }, [reportId, isLocked, role, toast]);
 
+  const scheduleSaveReportItem = useCallback((positionId: string, endingStock: number, writeOff: number) => {
+    const timeoutKey = `${positionId}`;
+    if (saveTimeouts.current[timeoutKey]) {
+      clearTimeout(saveTimeouts.current[timeoutKey]);
+    }
+    saveTimeouts.current[timeoutKey] = setTimeout(() => {
+      saveReportItem(positionId, endingStock, writeOff);
+    }, 600);
+  }, [saveReportItem]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(saveTimeouts.current).forEach(clearTimeout);
+    };
+  }, []);
+
   const handleInputChange = (positionId: string, value: string) => {
     const numValue = parseFloat(value) || 0;
     const calculatedWriteOff = calculateWriteOff(positionId, numValue);
@@ -277,12 +293,33 @@ export default function DailyReport() {
 
       // For managers editing locked reports, save immediately
       if (reportId && isLocked && role === "manager") {
-        setTimeout(() => {
-          saveReportItem(positionId, numValue, calculatedWriteOff);
-        }, 1000);
+        scheduleSaveReportItem(positionId, numValue, calculatedWriteOff);
       }
 
       return { ...prev, [positionId]: updated };
+    });
+  };
+
+  const handlePrefillFromYesterday = () => {
+    if (isLocked && role !== "manager") return;
+    if (prefillableCount === 0) {
+      toast({
+        title: "Nothing to prefill",
+        description: "No previous report data found for these positions.",
+      });
+      return;
+    }
+
+    setReportItems((prev) => applyPrefillFromYesterday({
+      reportItems: prev,
+      previousItems: previousReportItems,
+      previousDayData,
+      positions: visiblePositions,
+    }));
+
+    toast({
+      title: "Prefilled",
+      description: `Added ${prefillableCount} item${prefillableCount === 1 ? "" : "s"} from yesterday.`,
     });
   };
 
@@ -505,6 +542,12 @@ export default function DailyReport() {
   ).length;
   const progressPercentage = totalPositions > 0 ? (filledPositions / totalPositions) * 100 : 0;
 
+  const prefillableCount = useMemo(() => getPrefillableCount({
+    reportItems,
+    previousItems: previousReportItems,
+    positions: visiblePositions,
+  }), [reportItems, previousReportItems, visiblePositions]);
+
   // Calculate report summary for dialog
   const reportSummary = useMemo(() => {
     const items = Object.values(reportItems);
@@ -575,7 +618,7 @@ export default function DailyReport() {
   return (
     <div
       ref={containerRef}
-      className="container mx-auto p-4 md:p-6 pb-24 md:pb-6 min-h-screen overflow-auto"
+      className="container mx-auto p-4 md:p-6 pb-24 md:pb-6 min-h-screen overflow-auto animate-fade-in"
     >
       <PullToRefreshIndicator
         pullDistance={pullDistance}
@@ -606,6 +649,16 @@ export default function DailyReport() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {role === "barista" && !isLocked && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrefillFromYesterday}
+              disabled={prefillableCount === 0}
+            >
+              Prefill from yesterday
+            </Button>
+          )}
           {reportId && role === "manager" && (
             <Button
               variant={isLocked ? "outline" : "secondary"}

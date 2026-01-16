@@ -38,7 +38,7 @@ export default function ReportHistory() {
 
       const { data, error } = await supabase
         .from("daily_reports")
-        .select("*")
+        .select("id, report_date, is_locked, submitted_at")
         .eq("barista_id", user.id)
         .gte("report_date", monthStart)
         .lte("report_date", monthEnd)

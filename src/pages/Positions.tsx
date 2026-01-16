@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Pencil, ArrowLeft, Tags } from "lucide-react";
 import { z } from "zod";
+import { filterItemsByQuery } from "@/lib/search";
 
 const UNITS = ["кг", "л", "шт", "г", "мл", "уп"] as const;
 
@@ -66,6 +67,7 @@ const Positions = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
+  const [positionSearch, setPositionSearch] = useState("");
   const [formData, setFormData] = useState<PositionForm>({
     name: "",
     category: "",
@@ -342,6 +344,12 @@ const Positions = () => {
     }
   };
 
+  const filteredPositions = useMemo(() => filterItemsByQuery(
+    positions,
+    positionSearch,
+    (position) => `${position.name} ${position.category}`
+  ), [positions, positionSearch]);
+
   if (roleLoading || loading || categoriesLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -353,8 +361,10 @@ const Positions = () => {
   // Get active categories for position form
   const activeCategories = categories.filter(c => c.active);
 
+  const hasSearch = positionSearch.trim().length > 0;
+
   // Group positions by category, sorted by category sort_order
-  const groupedPositions = positions.reduce((acc, position) => {
+  const groupedPositions = filteredPositions.reduce((acc, position) => {
     if (!acc[position.category]) {
       acc[position.category] = [];
     }
@@ -370,7 +380,7 @@ const Positions = () => {
   });
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
+    <div className="min-h-screen bg-background p-4 md:p-8 animate-fade-in">
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -395,7 +405,13 @@ const Positions = () => {
 
           {/* Positions Tab */}
           <TabsContent value="positions" className="space-y-6">
-            <div className="flex justify-end">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Input
+                value={positionSearch}
+                onChange={(e) => setPositionSearch(e.target.value)}
+                placeholder="Поиск позиций"
+                className="sm:max-w-xs"
+              />
               <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogTrigger asChild>
                   <Button onClick={() => handleOpenDialog()}>
@@ -601,11 +617,18 @@ const Positions = () => {
             {positions.length === 0 && (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
-                  <p className="text-muted-foreground mb-4">Позиции ещё не созданы</p>
+                  <p className="text-sm text-muted-foreground mb-4">Позиции ещё не созданы</p>
                   <Button onClick={() => handleOpenDialog()}>
                     <Plus className="mr-2 h-4 w-4" />
                     Добавить первую позицию
                   </Button>
+                </CardContent>
+              </Card>
+            )}
+            {positions.length > 0 && hasSearch && filteredPositions.length === 0 && (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <p className="text-sm text-muted-foreground mb-4">Нет результатов по вашему запросу.</p>
                 </CardContent>
               </Card>
             )}
@@ -724,7 +747,7 @@ const Positions = () => {
             {categories.length === 0 && (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
-                  <p className="text-muted-foreground mb-4">Категории ещё не созданы</p>
+                  <p className="text-sm text-muted-foreground mb-4">Категории ещё не созданы</p>
                   <Button onClick={() => handleOpenCategoryDialog()}>
                     <Plus className="mr-2 h-4 w-4" />
                     Добавить первую категорию

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Trash2, X, ShoppingCart, Package, History } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ExcelImport } from "@/components/ExcelImport";
+import { filterItemsByQuery } from "@/lib/search";
 
 interface InventoryBatch {
   id: string;
@@ -68,6 +69,8 @@ export default function Warehouse() {
   const { data: positions = [], isLoading: positionsLoading } = usePositions(true);
   const { data: orderItems = [], isLoading: orderLoading } = useOrderNeeds();
   const [submitting, setSubmitting] = useState(false);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [batchSearch, setBatchSearch] = useState("");
 
   // Form state
   const [arrivalDate, setArrivalDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
@@ -88,6 +91,18 @@ export default function Warehouse() {
   });
 
   const isLoading = positionsLoading || orderLoading || batchesLoading;
+
+  const filteredOrderItems = useMemo(() => filterItemsByQuery(
+    orderItems,
+    orderSearch,
+    (item) => `${item.name} ${item.category}`
+  ), [orderItems, orderSearch]);
+
+  const filteredBatches = useMemo(() => filterItemsByQuery(
+    batches,
+    batchSearch,
+    (batch) => `${batch.positions?.name ?? ""} ${batch.positions?.category ?? ""}`
+  ), [batches, batchSearch]);
 
   const addBatchItem = () => setBatchItems([...batchItems, { positionId: "", quantity: "", costPerUnit: "" }]);
   const removeBatchItem = (index: number) => {
@@ -140,13 +155,17 @@ export default function Warehouse() {
       if (error) throw error;
 
       // Update last_cost for each position
-      for (const item of validItems) {
-        if (item.costPerUnit && parseFloat(item.costPerUnit) > 0) {
-          await supabase
+      const costUpdates = validItems
+        .filter((item) => item.costPerUnit && parseFloat(item.costPerUnit) > 0)
+        .map(async (item) => {
+          const { error: costError } = await supabase
             .from("positions")
             .update({ last_cost: parseFloat(item.costPerUnit) })
             .eq("id", item.positionId);
-        }
+          if (costError) throw costError;
+        });
+      if (costUpdates.length > 0) {
+        await Promise.all(costUpdates);
       }
 
       toast({ title: "Успешно", description: `Добавлено ${validItems.length} позиций` });
@@ -242,7 +261,7 @@ export default function Warehouse() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8">
+    <div className="min-h-screen bg-background p-4 md:p-8 animate-fade-in">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <Button variant="outline" size="icon" onClick={() => navigate("/")}>
@@ -287,8 +306,18 @@ export default function Warehouse() {
                 <CardDescription>Позиции с остатком ниже минимального уровня</CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="mb-3">
+                  <Input
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    placeholder="Поиск позиций"
+                    className="max-w-xs"
+                  />
+                </div>
                 {orderItems.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Все позиции в норме</p>
+                  <p className="text-center text-sm text-muted-foreground py-8">Все позиции в норме</p>
+                ) : filteredOrderItems.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-8">Нет результатов по вашему запросу.</p>
                 ) : (
                   <div className="rounded-md border">
                     <Table>
@@ -303,7 +332,7 @@ export default function Warehouse() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {orderItems.map((item) => (
+                        {filteredOrderItems.map((item) => (
                           <TableRow key={item.position_id}>
                             <TableCell>
                               <div className="font-medium">{item.name}</div>
@@ -433,8 +462,18 @@ export default function Warehouse() {
                 <CardDescription>Все поставки, отсортированные по дате прибытия</CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="mb-3">
+                  <Input
+                    value={batchSearch}
+                    onChange={(e) => setBatchSearch(e.target.value)}
+                    placeholder="Поиск поставок"
+                    className="max-w-xs"
+                  />
+                </div>
                 {batches.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">Нет записей о поставках</p>
+                  <p className="text-center text-sm text-muted-foreground py-8">Нет записей о поставках</p>
+                ) : filteredBatches.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-8">Нет результатов по вашему запросу.</p>
                 ) : (
                   <div className="rounded-md border">
                     <Table>
@@ -449,7 +488,7 @@ export default function Warehouse() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {batches.map((batch) => {
+                        {filteredBatches.map((batch) => {
                           const expiryStatus = getExpiryStatus(batch);
                           const expiryDateStr = batch.expiry_date || (batch.positions?.shelf_life_days
                             ? calculateExpiryDate(batch.arrival_date, batch.positions.shelf_life_days)
@@ -496,3 +535,5 @@ export default function Warehouse() {
     </div>
   );
 }
+
+

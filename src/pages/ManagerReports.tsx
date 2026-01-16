@@ -73,7 +73,7 @@ export default function ManagerReports() {
       // Fetch all reports
       let query = supabase
         .from("daily_reports")
-        .select("*")
+        .select("id, report_date, barista_id, is_locked, submitted_at, created_at")
         .order("report_date", { ascending: false });
 
       if (startDate) query = query.gte("report_date", startDate);

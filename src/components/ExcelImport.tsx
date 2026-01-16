@@ -347,13 +347,17 @@ export function ExcelImport({ positions: initialPositions, onImportComplete }: E
       if (batchError) throw batchError;
 
       // Update last_cost for each position
-      for (const item of validItems) {
-        if (item.costPerUnit > 0) {
-          await supabase
+      const costUpdates = validItems
+        .filter((item) => item.costPerUnit > 0)
+        .map(async (item) => {
+          const { error: costError } = await supabase
             .from("positions")
             .update({ last_cost: item.costPerUnit })
             .eq("id", item.matchedPosition!.id);
-        }
+          if (costError) throw costError;
+        });
+      if (costUpdates.length > 0) {
+        await Promise.all(costUpdates);
       }
 
       const totalAmount = validItems.reduce((sum, item) => sum + item.totalAmount, 0);
