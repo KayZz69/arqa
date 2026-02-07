@@ -10,11 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { format, subDays } from "date-fns";
 import { ru } from "date-fns/locale";
-import { CalendarIcon, ArrowLeft, Trash2, Send, Lock, Unlock, ChevronDown, ChevronUp, Circle } from "lucide-react";
-import { ReportStatusBadge } from "@/components/ReportStatusBadge";
-import { PositionCard } from "@/components/PositionCard";
-import { Progress } from "@/components/ui/progress";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { CalendarIcon } from "lucide-react";
 import { SubmitReportDialog } from "@/components/SubmitReportDialog";
 import { AddPositionDialog } from "@/components/AddPositionDialog";
 import { PullToRefreshIndicator } from "@/components/PullToRefreshIndicator";
@@ -36,6 +32,10 @@ import {
   checkHighWriteOffAndNotify,
   notifyReportSubmitted,
 } from "@/services/stockNotifications";
+import { ReportHeader } from "@/components/daily-report/ReportHeader";
+import { ReportProgressCard } from "@/components/daily-report/ReportProgressCard";
+import { CategorySection } from "@/components/daily-report/CategorySection";
+import { ReportActionsBar } from "@/components/daily-report/ReportActionsBar";
 
 
 export default function DailyReport() {
@@ -230,7 +230,6 @@ export default function DailyReport() {
 
   const calculateWriteOff = (positionId: string, endingStock: number): number => {
     const prev = previousDayData[positionId] || { ending_stock: 0, arrivals: 0 };
-    // Write-off = Previous stock + Arrivals - Current stock
     return Math.max(0, prev.ending_stock + prev.arrivals - endingStock);
   };
 
@@ -291,7 +290,6 @@ export default function DailyReport() {
       const current = prev[positionId] || { position_id: positionId, ending_stock: 0, write_off: 0 };
       const updated = { ...current, ending_stock: numValue, write_off: calculatedWriteOff };
 
-      // For managers editing locked reports, save immediately
       if (reportId && isLocked && role === "manager") {
         scheduleSaveReportItem(positionId, numValue, calculatedWriteOff);
       }
@@ -322,8 +320,6 @@ export default function DailyReport() {
       description: `Added ${prefillableCount} item${prefillableCount === 1 ? "" : "s"} from yesterday.`,
     });
   };
-
-
 
   const openSubmitDialog = () => {
     if (isLocked && role !== "manager") return;
@@ -366,7 +362,6 @@ export default function DailyReport() {
         setReportId(currentReportId);
       }
 
-      // Calculate write-offs for all items
       const itemsToInsert = Object.values(reportItems).map(item => {
         const writeOff = calculateWriteOff(item.position_id, item.ending_stock);
         return {
@@ -383,7 +378,6 @@ export default function DailyReport() {
 
       if (itemsError) throw itemsError;
 
-      // Lock the report
       const { error: lockError } = await supabase
         .from("daily_reports")
         .update({ is_locked: true })
@@ -391,11 +385,9 @@ export default function DailyReport() {
 
       if (lockError) throw lockError;
 
-      // Check for low stock and high write-offs using imported services
       await checkLowStockAndNotify(itemsToInsert, positions);
       await checkHighWriteOffAndNotify(itemsToInsert, positions, previousDayData);
 
-      // Send notification to managers about report
       await notifyReportSubmitted(
         currentReportId!,
         user?.email || "Unknown",
@@ -405,7 +397,6 @@ export default function DailyReport() {
       setIsLocked(true);
       setShowSubmitDialog(false);
 
-      // Haptic feedback on success
       if (navigator.vibrate) {
         navigator.vibrate([50, 50, 100]);
       }
@@ -506,23 +497,20 @@ export default function DailyReport() {
     }
   };
 
-  // Filter positions for baristas - hide positions without stock (unless manually added)
+  // Filter positions for baristas
   const visiblePositions = role === "manager"
     ? positions
     : positions.filter(position => {
-      // Always show manually added positions
       if (manuallyAddedPositions.includes(position.id)) return true;
       const prev = previousDayData[position.id];
-      if (!prev) return false; // Hide positions without previous data
-      // Show if there's previous stock OR arrivals today
+      if (!prev) return false;
       return prev.ending_stock > 0 || prev.arrivals > 0;
     });
 
-  // Hidden positions for the add dialog (positions with zero stock OR no previous data)
   const hiddenPositions = positions.filter(position => {
     if (manuallyAddedPositions.includes(position.id)) return false;
     const prev = previousDayData[position.id];
-    if (!prev) return true; // Include positions without previous data
+    if (!prev) return true;
     return prev.ending_stock === 0 && prev.arrivals === 0;
   });
 
@@ -548,7 +536,6 @@ export default function DailyReport() {
     positions: visiblePositions,
   }), [reportItems, previousReportItems, visiblePositions]);
 
-  // Calculate report summary for dialog
   const reportSummary = useMemo(() => {
     const items = Object.values(reportItems);
     const totalWriteOff = items.reduce((sum, item) => {
@@ -572,7 +559,6 @@ export default function DailyReport() {
     };
   }, [reportItems, previousDayData, filledPositions, totalPositions]);
 
-  // Check if a category is fully filled
   const isCategoryFilled = useCallback((categoryPositions: Position[]) => {
     return categoryPositions.every(pos => {
       const item = reportItems[pos.id];
@@ -586,14 +572,13 @@ export default function DailyReport() {
 
     Object.entries(groupedPositions).forEach(([category, categoryPositions]) => {
       const allFilled = isCategoryFilled(categoryPositions);
-      // Only auto-collapse if not manually set and all filled
       if (allFilled && openCategories[category] === undefined) {
         setOpenCategories(prev => ({ ...prev, [category]: false }));
       }
     });
   }, [reportItems, groupedPositions, role, isCategoryFilled]);
 
-  const getReportStatus = () => {
+  const getReportStatusLocal = () => {
     if (!reportId) return "draft";
     if (isLocked) return "submitted";
     return "draft";
@@ -626,79 +611,24 @@ export default function DailyReport() {
         progress={progress}
         shouldTrigger={shouldTrigger}
       />
-      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl md:text-3xl font-bold">Ежедневный отчёт</h1>
-              <ReportStatusBadge status={getReportStatus()} />
-            </div>
-            {totalPositions > 0 && (
-              <p className="text-sm text-muted-foreground mt-1">
-                Заполнено: {filledPositions} из {totalPositions} позиций
-                {hiddenPositionsCount > 0 && role === "barista" && (
-                  <span className="ml-2 opacity-70">
-                    ({hiddenPositionsCount} без остатков скрыто)
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {role === "barista" && !isLocked && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePrefillFromYesterday}
-              disabled={prefillableCount === 0}
-            >
-              Prefill from yesterday
-            </Button>
-          )}
-          {reportId && role === "manager" && (
-            <Button
-              variant={isLocked ? "outline" : "secondary"}
-              size="sm"
-              onClick={handleToggleLock}
-            >
-              {isLocked ? (
-                <>
-                  <Unlock className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Разблокировать</span>
-                </>
-              ) : (
-                <>
-                  <Lock className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Заблокировать</span>
-                </>
-              )}
-            </Button>
-          )}
-          {reportId && role === "manager" && (
-            <Button variant="destructive" size="sm" onClick={handleDeleteReport}>
-              <Trash2 className="h-4 w-4 md:mr-2" />
-              <span className="hidden md:inline">Удалить</span>
-            </Button>
-          )}
-        </div>
-      </div>
+
+      <ReportHeader
+        role={role}
+        isLocked={isLocked}
+        reportId={reportId}
+        filledPositions={filledPositions}
+        totalPositions={totalPositions}
+        hiddenPositionsCount={hiddenPositionsCount}
+        prefillableCount={prefillableCount}
+        reportStatus={getReportStatusLocal()}
+        onNavigateHome={() => navigate("/")}
+        onPrefill={handlePrefillFromYesterday}
+        onToggleLock={handleToggleLock}
+        onDelete={handleDeleteReport}
+      />
 
       {totalPositions > 0 && (
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Прогресс заполнения</span>
-                <span className="font-medium">{Math.round(progressPercentage)}%</span>
-              </div>
-              <Progress value={progressPercentage} className="h-2" />
-            </div>
-          </CardContent>
-        </Card>
+        <ReportProgressCard progressPercentage={progressPercentage} />
       )}
 
       <Card className="mb-6">
@@ -759,66 +689,24 @@ export default function DailyReport() {
           const isOpen = openCategories[category] !== false;
 
           return (
-            <Card key={category} className={cn(
-              "transition-all",
-              allFilled && "border-primary/30"
-            )}>
-              <Collapsible open={isOpen} onOpenChange={() => toggleCategory(category)}>
-                <CardHeader className="cursor-pointer" onClick={() => toggleCategory(category)}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {!allFilled && role === "barista" && (
-                        <Circle className="h-2 w-2 fill-amber-500 text-amber-500 shrink-0" />
-                      )}
-                      <CardTitle>{category}</CardTitle>
-                      <span className={cn(
-                        "text-sm",
-                        allFilled ? "text-primary font-medium" : "text-muted-foreground"
-                      )}>
-                        {categoryFilledCount}/{categoryPositions.length}
-                      </span>
-                    </div>
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" size="sm" className="min-h-[44px] min-w-[44px]">
-                        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </Button>
-                    </CollapsibleTrigger>
-                  </div>
-                </CardHeader>
-                <CollapsibleContent className="animate-accordion-down">
-                  <CardContent>
-                    <div className="space-y-3">
-                      {categoryPositions.map(position => {
-                        const item = reportItems[position.id] || {
-                          position_id: position.id,
-                          ending_stock: 0,
-                          write_off: 0,
-                        };
-                        const prev = previousDayData[position.id] || { ending_stock: 0, arrivals: 0 };
-                        const calculatedWriteOff = calculateWriteOff(position.id, item.ending_stock);
-
-                        return (
-                          <PositionCard
-                            key={position.id}
-                            position={position}
-                            endingStock={item.ending_stock}
-                            previousStock={prev.ending_stock}
-                            arrivals={prev.arrivals}
-                            calculatedWriteOff={calculatedWriteOff}
-                            disabled={isLocked && role !== "manager"}
-                            onChange={(value) => handleInputChange(position.id, value)}
-                          />
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
+            <CategorySection
+              key={category}
+              category={category}
+              positions={categoryPositions}
+              reportItems={reportItems}
+              previousDayData={previousDayData}
+              isOpen={isOpen}
+              allFilled={allFilled}
+              filledCount={categoryFilledCount}
+              role={role}
+              isLocked={isLocked}
+              onToggle={() => toggleCategory(category)}
+              onInputChange={handleInputChange}
+              calculateWriteOff={calculateWriteOff}
+            />
           );
         })}
 
-        {/* Add Position Button for Baristas - outside categories */}
         {role === "barista" && !isLocked && hiddenPositions.length > 0 && (
           <AddPositionDialog
             hiddenPositions={hiddenPositions}
@@ -827,63 +715,16 @@ export default function DailyReport() {
         )}
       </div>
 
-      {/* Desktop Submit Button for Baristas */}
-      {role === "barista" && !isLocked && (
-        <div className="hidden md:block mt-6">
-          {filledPositions === 0 && (
-            <p className="text-sm text-muted-foreground text-right mb-2">
-              Заполните хотя бы одну позицию
-            </p>
-          )}
-          <div className="flex gap-2 justify-end">
-            <Button
-              variant="destructive"
-              onClick={handleDeleteReport}
-              disabled={Object.keys(reportItems).length === 0}
-              className="min-h-[44px]"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Очистить черновик
-            </Button>
-            <Button
-              onClick={openSubmitDialog}
-              disabled={submitting || filledPositions === 0}
-              size="lg"
-              className="min-h-[44px]"
-            >
-              <Send className="h-4 w-4 mr-2" />
-              Отправить отчёт
-            </Button>
-          </div>
-        </div>
-      )}
+      <ReportActionsBar
+        role={role}
+        isLocked={isLocked}
+        submitting={submitting}
+        filledPositions={filledPositions}
+        reportItemsCount={Object.keys(reportItems).length}
+        onSubmit={openSubmitDialog}
+        onDelete={handleDeleteReport}
+      />
 
-      {/* Sticky Submit Button for Baristas (Mobile) */}
-      {role === "barista" && !isLocked && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t p-4 md:hidden safe-area-bottom">
-          <div className="flex gap-2">
-            <Button
-              className="flex-1 min-h-[52px] text-base"
-              size="lg"
-              onClick={openSubmitDialog}
-              disabled={submitting || filledPositions === 0}
-            >
-              <Send className="h-5 w-5 mr-2" />
-              Отправить отчёт
-            </Button>
-            <Button
-              variant="destructive"
-              size="lg"
-              onClick={handleDeleteReport}
-              className="min-h-[52px] min-w-[52px]"
-            >
-              <Trash2 className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Submit Report Dialog */}
       <SubmitReportDialog
         open={showSubmitDialog}
         onOpenChange={setShowSubmitDialog}

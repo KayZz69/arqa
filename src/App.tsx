@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 // Lazy load all pages for code splitting
@@ -45,6 +46,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <ErrorBoundary>
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/setup" element={<Setup />} />
@@ -60,7 +62,7 @@ const App = () => (
               <Route
                 path="/positions"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["manager"]}>
                     <Positions />
                   </ProtectedRoute>
                 }
@@ -68,7 +70,7 @@ const App = () => (
               <Route
                 path="/daily-report"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["barista", "manager"]}>
                     <DailyReport />
                   </ProtectedRoute>
                 }
@@ -76,7 +78,7 @@ const App = () => (
               <Route
                 path="/warehouse"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["manager"]}>
                     <Warehouse />
                   </ProtectedRoute>
                 }
@@ -84,7 +86,7 @@ const App = () => (
               <Route
                 path="/current-inventory"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["barista", "manager"]}>
                     <CurrentInventory />
                   </ProtectedRoute>
                 }
@@ -92,7 +94,7 @@ const App = () => (
               <Route
                 path="/manager-reports"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["manager"]}>
                     <ManagerReports />
                   </ProtectedRoute>
                 }
@@ -100,7 +102,7 @@ const App = () => (
               <Route
                 path="/report-history"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["barista"]}>
                     <ReportHistory />
                   </ProtectedRoute>
                 }
@@ -109,6 +111,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          </ErrorBoundary>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

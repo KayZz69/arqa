@@ -2,70 +2,32 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Scope
 
-ARQA is a React-based inventory and daily reporting system for cafés/restaurants. Baristas submit end-of-day stock reports; managers oversee inventory, orders, and analytics. Two roles: **barista** (submit reports, view history) and **manager** (full access).
+This document defines AI agent behavior and safety rules.
+- Contributor workflow (commands, coding style, PR expectations): see `AGENTS.md`.
+- System design and data model: see `architecture.md`.
 
-## Commands
-
-```bash
-npm run dev          # Start dev server on port 8080
-npm run build        # Production build
-npm run build:dev    # Development build
-npm run lint         # ESLint
-npm run preview      # Preview production build
-```
-
-No test runner is configured. There are no project-level tests yet.
-
-## Tech Stack
-
-- **Frontend:** React 18 + TypeScript + Vite (SWC)
-- **Styling:** Tailwind CSS 3 + shadcn/ui (Radix primitives)
-- **Backend:** Supabase (PostgreSQL + Auth + RLS)
-- **Server state:** React Query (`@tanstack/react-query`)
-- **Routing:** React Router v6 with lazy-loaded pages
-- **Forms:** React Hook Form + Zod validation
-- **Path alias:** `@/` maps to `./src/`
-
-## Architecture
-
-### Layers
-
-```
-src/
-├── pages/           # Route-level components (main business logic lives here)
-├── components/      # Shared components (ProtectedRoute, dialogs, navigation)
-│   └── ui/          # shadcn/ui base components — do not edit directly
-├── hooks/           # Custom hooks (usePositions, useCategories, useCurrentStock, etc.)
-├── services/        # Business logic (reportValidation, stockNotifications)
-├── contexts/        # AuthContext — provides user, session, role, isManager, isBarista
-├── integrations/    # Supabase client and auto-generated DB types
-└── lib/             # Utilities (cn() for class merging)
-```
-
-### Key Patterns
-
-- **Auth flow:** Login page uses multi-step selection (role → user → password). `AuthContext` wraps the app; `ProtectedRoute` guards pages by checking session.
-- **Data fetching:** All Supabase queries go through React Query hooks. Queries use `supabase` client from `@/integrations/supabase/client`. DB types are auto-generated in `@/integrations/supabase/types.ts`.
-- **Write-off calculation:** `previous_stock + arrivals - current_stock`. This logic is in `DailyReport.tsx` and `reportValidation.ts`.
-- **Notifications:** `stockNotifications.ts` generates low-stock alerts (stock < min_stock) and high write-off alerts (write-off > 50% of available and > 2 units).
-- **Role-based UI:** Dashboard (`Index.tsx`) renders different views for barista vs manager using `isManager`/`isBarista` from `useAuth()`.
-
-### Database Tables
-
-`profiles`, `user_roles`, `categories`, `positions`, `daily_reports`, `report_items`, `inventory_batches`, `notifications`. View: `current_stock_levels`. See `architecture.md` for the ER diagram.
+Last verified: 2026-02-07.
 
 ## TypeScript Configuration
 
-Strict mode is **off**. `noImplicitAny`, `strictNullChecks`, `noUnusedLocals`, `noUnusedParameters` are all disabled. ESLint also has `@typescript-eslint/no-unused-vars` turned off.
+Strict mode is **off**. `noImplicitAny`, `strictNullChecks`, `noUnusedLocals`, and `noUnusedParameters` are disabled. ESLint also has `@typescript-eslint/no-unused-vars` disabled.
 
 ## Agent Rules (`.agent/rules/`)
 
-These rules apply to all AI agents working in this repo:
+These rules apply to AI agents working in this repo:
 
 - **Scope:** Only touch what the task requires. Do not modify config, DB schemas, or CI/CD unless explicitly asked. Ask before changes that might break other parts.
-- **Style:** Match existing patterns. Small focused functions. No big refactors unless asked. New features go in their own file/module.
-- **Contracts:** Propose a plan before changing public APIs or DB schemas. Suggest backward-compatible options if a change would break callers.
+- **Style:** Match existing patterns. Prefer small focused functions. Avoid broad refactors unless requested.
+- **Contracts:** Propose a plan before changing public APIs or DB schemas. Suggest backward-compatible options when possible.
 - **Testing:** Add or update tests for non-trivial changes. Never delete tests without approval. Show a summary of test results.
-- **Docs:** Update at least one doc file for user-facing features. Document new config flags/env vars. Add comments for non-obvious logic.
+- **Docs:** Update docs for user-facing features. Document new config flags or env vars. Add comments only for non-obvious logic.
+
+## Agent Checklist
+
+Before finishing a task:
+1. Run `npm run lint` when code changes are made.
+2. Run `node --test "tests/*.test.js"` when touched logic is covered by unit tests.
+3. If DB behavior changes, include a migration and document impact.
+4. If architecture-level behavior changes, update `architecture.md`.

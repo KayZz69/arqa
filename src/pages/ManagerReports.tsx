@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { usePagination } from "@/hooks/usePagination";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,6 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { useUserRole } from "@/hooks/useUserRole";
 import { ArrowLeft, Download, FileText, Lock, Unlock, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -48,7 +48,6 @@ interface BaristaInfo {
 
 export default function ManagerReports() {
   const navigate = useNavigate();
-  const { role, loading: roleLoading } = useUserRole();
   const [reports, setReports] = useState<DailyReport[]>([]);
   const [baristas, setBaristas] = useState<BaristaInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,12 +58,8 @@ export default function ManagerReports() {
   const [selectedBarista, setSelectedBarista] = useState<string>("all");
 
   useEffect(() => {
-    if (!roleLoading && role !== "manager") {
-      navigate("/");
-      return;
-    }
     fetchData();
-  }, [roleLoading, role, navigate]);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -187,11 +182,16 @@ export default function ManagerReports() {
     return baristas.find((b) => b.user_id === userId)?.display_name || "Неизвестно";
   };
 
-  if (roleLoading || loading) {
+  const { paginatedItems: paginatedReports, currentPage, totalPages, goToPage, resetPage, hasNextPage, hasPrevPage } = usePagination(reports, 25);
+
+  // Reset page when filters change (fetchData is called)
+  useEffect(() => {
+    resetPage();
+  }, [reports, resetPage]);
+
+  if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Загрузка...</p></div>;
   }
-
-  if (role !== "manager") return null;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -272,7 +272,7 @@ export default function ManagerReports() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    reports.map((report) => (
+                    paginatedReports.map((report) => (
                       <TableRow key={report.id}>
                         <TableCell className="font-medium">
                           {format(new Date(report.report_date), "dd.MM.yyyy")}
@@ -303,6 +303,31 @@ export default function ManagerReports() {
                 </TableBody>
               </Table>
             </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4">
+                <span className="text-sm text-muted-foreground">
+                  Страница {currentPage + 1} из {totalPages}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={!hasPrevPage}
+                  >
+                    Назад
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={!hasNextPage}
+                  >
+                    Вперёд
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

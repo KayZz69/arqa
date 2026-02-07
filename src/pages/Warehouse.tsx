@@ -1,43 +1,24 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { usePagination } from "@/hooks/usePagination";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
+  Card, CardContent, CardHeader,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/hooks/use-toast";
-import { useUserRole } from "@/hooks/useUserRole";
 import { usePositions } from "@/hooks/usePositions";
 import { useOrderNeeds } from "@/hooks/useCurrentStock";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus, Trash2, X, ShoppingCart, Package, History } from "lucide-react";
+import { ArrowLeft, Plus, ShoppingCart, History } from "lucide-react";
 import { format, addDays } from "date-fns";
-import { ExcelImport } from "@/components/ExcelImport";
 import { filterItemsByQuery } from "@/lib/search";
+import { OrdersTab } from "@/components/warehouse/OrdersTab";
+import { AddBatchTab } from "@/components/warehouse/AddBatchTab";
+import { HistoryTab } from "@/components/warehouse/HistoryTab";
 
 interface InventoryBatch {
   id: string;
@@ -65,7 +46,6 @@ interface BatchItem {
 export default function Warehouse() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { role, loading: roleLoading } = useUserRole();
   const { data: positions = [], isLoading: positionsLoading } = usePositions(true);
   const { data: orderItems = [], isLoading: orderLoading } = useOrderNeeds();
   const [submitting, setSubmitting] = useState(false);
@@ -134,6 +114,21 @@ export default function Warehouse() {
       return;
     }
 
+    for (const item of validItems) {
+      const qty = parseFloat(item.quantity);
+      const cost = item.costPerUnit ? parseFloat(item.costPerUnit) : 0;
+      const position = positions.find((p) => p.id === item.positionId);
+      const posName = position ? position.name : "Неизвестная позиция";
+      if (!qty || qty <= 0) {
+        toast({ title: "Ошибка", description: `${posName}: количество должно быть больше 0`, variant: "destructive" });
+        return;
+      }
+      if (cost < 0) {
+        toast({ title: "Ошибка", description: `${posName}: себестоимость не может быть отрицательной`, variant: "destructive" });
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -154,7 +149,6 @@ export default function Warehouse() {
       const { error } = await supabase.from("inventory_batches").insert(batchRecords);
       if (error) throw error;
 
-      // Update last_cost for each position
       const costUpdates = validItems
         .filter((item) => item.costPerUnit && parseFloat(item.costPerUnit) > 0)
         .map(async (item) => {
@@ -180,25 +174,48 @@ export default function Warehouse() {
     }
   };
 
-  const handleMarkAsOrdered = async (item: typeof orderItems[0]) => {
+  const handleConfirmOrder = async (
+    item: { position_id: string; name: string; shelf_life_days: number | null },
+    orderArrivalDate: string,
+    qty: number,
+    cost: number
+  ) => {
+    if (!qty || qty <= 0) {
+      toast({ title: "Ошибка", description: "Количество должно быть больше 0", variant: "destructive" });
+      return;
+    }
+    if (cost < 0) {
+      toast({ title: "Ошибка", description: "Себестоимость не может быть отрицательной", variant: "destructive" });
+      return;
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase.from("inventory_batches").insert({
         position_id: item.position_id,
-        quantity: item.order_quantity,
-        arrival_date: format(new Date(), "yyyy-MM-dd"),
-        expiry_date: calculateExpiryDate(format(new Date(), "yyyy-MM-dd"), item.shelf_life_days),
+        quantity: qty,
+        cost_per_unit: cost,
+        arrival_date: orderArrivalDate,
+        expiry_date: calculateExpiryDate(orderArrivalDate, item.shelf_life_days),
         created_by: user.id,
       });
 
       if (error) throw error;
-      toast({ title: "Успешно", description: `${item.name} отмечен как заказанный` });
+
+      if (cost > 0) {
+        await supabase
+          .from("positions")
+          .update({ last_cost: cost })
+          .eq("id", item.position_id);
+      }
+
+      toast({ title: "Успешно", description: `Приход ${item.name} оформлен` });
       invalidateQueries();
     } catch (error) {
-      console.error("Error marking as ordered:", error);
-      toast({ title: "Ошибка", description: "Не удалось отметить как заказанный", variant: "destructive" });
+      console.error("Error confirming order:", error);
+      toast({ title: "Ошибка", description: "Не удалось оформить приход", variant: "destructive" });
     }
   };
 
@@ -215,6 +232,13 @@ export default function Warehouse() {
     }
   };
 
+  const { paginatedItems: paginatedBatches, currentPage, totalPages, goToPage, resetPage, hasNextPage, hasPrevPage } = usePagination(filteredBatches, 25);
+
+  // Reset page when search changes
+  useEffect(() => {
+    resetPage();
+  }, [batchSearch, resetPage]);
+
   const getExpiryStatus = (batch: InventoryBatch) => {
     const expiryDateStr = batch.expiry_date || (batch.positions?.shelf_life_days
       ? calculateExpiryDate(batch.arrival_date, batch.positions.shelf_life_days)
@@ -227,15 +251,6 @@ export default function Warehouse() {
     if (expiryDate <= oneDayFromNow) return "expiring";
     return "normal";
   };
-
-  if (roleLoading) {
-    return <div className="min-h-screen bg-background flex items-center justify-center"><Skeleton className="h-8 w-32" /></div>;
-  }
-
-  if (role !== "manager") {
-    navigate("/");
-    return null;
-  }
 
   if (isLoading) {
     return (
@@ -295,245 +310,70 @@ export default function Warehouse() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab: Orders */}
           <TabsContent value="orders">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5" />
-                  Позиции для заказа
-                </CardTitle>
-                <CardDescription>Позиции с остатком ниже минимального уровня</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-3">
-                  <Input
-                    value={orderSearch}
-                    onChange={(e) => setOrderSearch(e.target.value)}
-                    placeholder="Поиск позиций"
-                    className="max-w-xs"
-                  />
-                </div>
-                {orderItems.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-8">Все позиции в норме</p>
-                ) : filteredOrderItems.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-8">Нет результатов по вашему запросу.</p>
-                ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Позиция</TableHead>
-                          <TableHead className="text-right">Остаток</TableHead>
-                          <TableHead className="text-right">Минимум</TableHead>
-                          <TableHead className="text-right">Заказать</TableHead>
-                          <TableHead className="text-right">~Сумма</TableHead>
-                          <TableHead className="text-right">Действие</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredOrderItems.map((item) => (
-                          <TableRow key={item.position_id}>
-                            <TableCell>
-                              <div className="font-medium">{item.name}</div>
-                              <div className="text-xs text-muted-foreground">{item.category}</div>
-                            </TableCell>
-                            <TableCell className="text-right text-destructive font-medium">
-                              {item.current_stock || 0} {item.unit}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {item.min_stock || 0} {item.unit}
-                            </TableCell>
-                            <TableCell className="text-right font-medium">
-                              {item.order_quantity || 0} {item.unit}
-                            </TableCell>
-                            <TableCell className="text-right text-muted-foreground">
-                              {(item.last_cost || 0) > 0 
-                                ? `~${((item.order_quantity || 0) * (item.last_cost || 0)).toLocaleString()}₸`
-                                : "—"
-                              }
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button size="sm" onClick={() => handleMarkAsOrdered(item)}>
-                                Заказано
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <OrdersTab
+              orderItems={orderItems}
+              filteredOrderItems={filteredOrderItems}
+              orderSearch={orderSearch}
+              onOrderSearchChange={setOrderSearch}
+              onConfirmOrder={handleConfirmOrder}
+            />
           </TabsContent>
 
-          {/* Tab: Add Batch */}
           <TabsContent value="add">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Plus className="h-5 w-5" />
-                  Добавить приход
-                </CardTitle>
-                <CardDescription>Добавить несколько позиций в одну партию поставки</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="arrival">Дата прибытия</Label>
-                    <Input
-                      id="arrival"
-                      type="date"
-                      value={arrivalDate}
-                      onChange={(e) => setArrivalDate(e.target.value)}
-                    />
-                  </div>
+            <AddBatchTab
+              positions={positions}
+              arrivalDate={arrivalDate}
+              onArrivalDateChange={setArrivalDate}
+              batchItems={batchItems}
+              onAddItem={addBatchItem}
+              onRemoveItem={removeBatchItem}
+              onUpdateItem={updateBatchItem}
+              onSubmit={handleSubmit}
+              submitting={submitting}
+              onImportComplete={invalidateQueries}
+            />
+          </TabsContent>
 
-                  <div className="space-y-3">
-                    <Label>Позиции</Label>
-                    {batchItems.map((item, index) => (
-                      <div key={index} className="space-y-2 p-3 border rounded-md">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Позиция {index + 1}</span>
-                          {batchItems.length > 1 && (
-                            <Button type="button" variant="ghost" size="icon" onClick={() => removeBatchItem(index)}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                        <Select value={item.positionId} onValueChange={(value) => updateBatchItem(index, "positionId", value)}>
-                          <SelectTrigger><SelectValue placeholder="Выберите позицию" /></SelectTrigger>
-                          <SelectContent>
-                            {positions.map((position) => (
-                              <SelectItem key={position.id} value={position.id}>
-                                {position.category} - {position.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.quantity}
-                          onChange={(e) => updateBatchItem(index, "quantity", e.target.value)}
-                          placeholder="Количество"
-                        />
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.costPerUnit}
-                          onChange={(e) => updateBatchItem(index, "costPerUnit", e.target.value)}
-                          placeholder="Себестоимость за единицу (₸)"
-                        />
-                      </div>
-                    ))}
-                    <Button type="button" variant="outline" size="sm" onClick={addBatchItem} className="w-full">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Добавить ещё позицию
+          <TabsContent value="history">
+            <HistoryTab
+              batches={batches}
+              filteredBatches={filteredBatches}
+              batchSearch={batchSearch}
+              onBatchSearchChange={setBatchSearch}
+              onDeleteBatch={handleDeleteBatch}
+              getExpiryStatus={getExpiryStatus}
+              calculateExpiryDate={calculateExpiryDate}
+              paginatedBatches={paginatedBatches}
+              paginationControls={totalPages > 1 ? (
+                <div className="flex items-center justify-between mt-4">
+                  <span className="text-sm text-muted-foreground">
+                    Страница {currentPage + 1} из {totalPages}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => goToPage(currentPage - 1)}
+                      disabled={!hasPrevPage}
+                    >
+                      Назад
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => goToPage(currentPage + 1)}
+                      disabled={!hasNextPage}
+                    >
+                      Вперёд
                     </Button>
                   </div>
-
-                  <div className="pt-2 border-t">
-                    <ExcelImport
-                      positions={positions}
-                      onImportComplete={invalidateQueries}
-                    />
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={submitting}>
-                    {submitting ? "Сохранение..." : "Сохранить приход"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Tab: History */}
-          <TabsContent value="history">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="h-5 w-5" />
-                  История поставок
-                </CardTitle>
-                <CardDescription>Все поставки, отсортированные по дате прибытия</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-3">
-                  <Input
-                    value={batchSearch}
-                    onChange={(e) => setBatchSearch(e.target.value)}
-                    placeholder="Поиск поставок"
-                    className="max-w-xs"
-                  />
                 </div>
-                {batches.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-8">Нет записей о поставках</p>
-                ) : filteredBatches.length === 0 ? (
-                  <p className="text-center text-sm text-muted-foreground py-8">Нет результатов по вашему запросу.</p>
-                ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Позиция</TableHead>
-                          <TableHead className="text-right">Кол-во</TableHead>
-                          <TableHead className="text-right">Себест.</TableHead>
-                          <TableHead className="text-right">Прибытие</TableHead>
-                          <TableHead className="text-right">Годен до</TableHead>
-                          <TableHead className="text-right"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredBatches.map((batch) => {
-                          const expiryStatus = getExpiryStatus(batch);
-                          const expiryDateStr = batch.expiry_date || (batch.positions?.shelf_life_days
-                            ? calculateExpiryDate(batch.arrival_date, batch.positions.shelf_life_days)
-                            : null);
-                          return (
-                            <TableRow key={batch.id}>
-                              <TableCell>
-                                <div className="font-medium">{batch.positions?.name}</div>
-                                <div className="text-xs text-muted-foreground">{batch.positions?.category}</div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {batch.quantity} {batch.positions?.unit}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">
-                                {batch.cost_per_unit > 0 ? `${batch.cost_per_unit}₸` : "—"}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {format(new Date(batch.arrival_date), "dd.MM.yyyy")}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {expiryDateStr ? (
-                                  <Badge variant={expiryStatus === "expired" ? "destructive" : expiryStatus === "expiring" ? "default" : "secondary"}>
-                                    {format(new Date(expiryDateStr), "dd.MM.yyyy")}
-                                  </Badge>
-                                ) : "—"}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteBatch(batch.id)}>
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              ) : undefined}
+            />
           </TabsContent>
         </Tabs>
       </div>
     </div>
   );
 }
-
-

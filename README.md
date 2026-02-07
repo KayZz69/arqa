@@ -60,8 +60,10 @@ Create a `.env` file in the project root:
 |---------|-------------|
 | `npm run dev` | Start development server |
 | `npm run build` | Build for production |
+| `npm run build:dev` | Build in development mode |
 | `npm run preview` | Preview production build |
 | `npm run lint` | Run ESLint |
+| `node --test "tests/*.test.js"` | Run unit tests |
 
 ## Project Structure
 
@@ -78,4 +80,6 @@ src/
 
 ## Documentation
 
-- [Architecture Overview](./architecture.md) - System design and data model
+- [Repository Guidelines](./AGENTS.md) - Contributor workflow, style, and PR standards
+- [Architecture Overview](./architecture.md) - System design, data model, and domain rules
+- [Claude Agent Rules](./CLAUDE.md) - AI-agent scope and safety constraints
